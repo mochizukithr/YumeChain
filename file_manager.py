@@ -139,15 +139,14 @@ class FileManager:
         
         # YAMLフロントマターを生成
         yaml_frontmatter = f"""---
-title: "{title}《{arc}》"
+title: "{chapter_title} {title}"
 author: "Gemini"
 date: "{current_date}"
 lang: "ja"
-description: "{description or f'現代の知識を持ったまま過去に転生した主人公の物語。'}"
-tags: ["転生", "歴史改変", "技術", "昭和", "成長"]
-series: "{title}シリーズ"
+description: "{description or f'AI生成小説。'}"
+series: "{title}"
 volume: 1
-chapter: "{chapter_title}"
+chapter: "{episode}"
 ---
 
 """
