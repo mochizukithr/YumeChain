@@ -1,0 +1,12 @@
+[project]
+name = "llm-x-reader"
+version = "0.1.0"
+description = "Novel generation app using LLM (Gemini)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "click>=8.2.1",
+    "google-generativeai>=0.8.5",
+    "python-dotenv>=1.1.0",
+    "rich>=13.3.0",
+]
