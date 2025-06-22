@@ -9,4 +9,6 @@ dependencies = [
     "google-generativeai>=0.8.5",
     "python-dotenv>=1.1.0",
     "rich>=13.3.0",
+    "pelican>=4.9.1",
+    "markdown>=3.4.0",
 ]

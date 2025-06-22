@@ -5,14 +5,65 @@ LLM（Gemini）を使って設定から小説を生成するアプリケーシ�
 """
 import click
 import time
+from pathlib import Path
 from rich.console import Console
 from llm_client import LLMClient
 from file_manager import FileManager
+from pelican_manager import PelicanServerManager
 
 @click.group()
 def cli():
     """小説生成アプリ - LLMを使って小説を自動生成します"""
     pass
+
+@cli.command()
+@click.option('--title', required=True, help='小説のタイトル（ディレクトリ名）')
+@click.option('--port', default=8000, help='サーバーポート番号 (デフォルト: 8000)')
+@click.option('--no-browser', is_flag=True, help='ブラウザを自動で開かない')
+def read(title: str, port: int, no_browser: bool):
+    """小説をWebブラウザで読む（Pelicanサーバー起動）"""
+    console = Console()
+    
+    try:
+        console.print(f"[bold cyan]📖 小説リーダーを起動します[/bold cyan]")
+        console.print(f"[dim]作品名: {title}[/dim]")
+        console.print(f"[dim]ポート: {port}[/dim]")
+        
+        # PelicanServerManagerを初期化
+        base_dir = Path.cwd()
+        manager = PelicanServerManager(base_dir)
+        
+        # コンテンツの準備
+        console.print("[dim]📝 コンテンツを準備中...[/dim]")
+        if not manager.prepare_content(title):
+            return
+        
+        # サイトのビルド
+        console.print("[dim]🔨 サイトをビルド中...[/dim]")
+        if not manager.build_site():
+            manager.cleanup()
+            return
+        
+        # サーバーの起動
+        if not manager.start_server(port=port, auto_open=not no_browser):
+            manager.cleanup()
+            return
+        
+        # サーバーの終了を待機
+        try:
+            manager.wait_for_server()
+        finally:
+            manager.cleanup()
+            console.print("[green]✓ リーダーを終了しました[/green]")
+            
+    except KeyboardInterrupt:
+        console.print("\n[yellow]ユーザーによって中断されました[/yellow]")
+        if 'manager' in locals():
+            manager.cleanup()
+    except Exception as e:
+        console.print(f"[red]✗ エラー: {str(e)}[/red]")
+        if 'manager' in locals():
+            manager.cleanup()
 
 @cli.command()
 @click.option('--title', required=True, help='小説のタイトル（ディレクトリ名）')

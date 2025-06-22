@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="{{ DEFAULT_LANG }}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}{{ SITENAME }}{% endblock title %}</title>
+    <link rel="stylesheet" type="text/css" href="{{ SITEURL }}/css/novel.css" />
+    {% if FEED_ALL_ATOM %}
+    <link
+      href="{{ FEED_DOMAIN }}/{{ FEED_ALL_ATOM }}"
+      type="application/atom+xml"
+      rel="alternate"
+      title="{{ SITENAME }} Atom Feed"
+    />
+    {% endif %} {% if FEED_ALL_RSS %}
+    <link
+      href="{{ FEED_DOMAIN }}/{{ FEED_ALL_RSS }}"
+      type="application/rss+xml"
+      rel="alternate"
+      title="{{ SITENAME }} RSS Feed"
+    />
+    {% endif %}
+  </head>
+
+  <body>
+    <div class="container">
+      <header>
+        <h1><a href="{{ SITEURL }}/">{{ SITENAME }}</a></h1>
+        {% if SITESUBTITLE %}
+        <p>{{ SITESUBTITLE }}</p>
+        {% endif %}
+      </header>
+
+      <nav>
+        <ul>
+          <li><a href="{{ SITEURL }}/">ホーム</a></li>
+          {% if DISPLAY_CATEGORIES_ON_MENU %} {% for cat, null in categories %}
+          <li><a href="{{ SITEURL }}/{{ cat.url }}">{{ cat }}</a></li>
+          {% endfor %} {% endif %}
+        </ul>
+      </nav>
+
+      <main>{% block content %} {% endblock %}</main>
+
+      <footer>
+        <p>
+          Powered by <a href="https://getpelican.com/">Pelican</a> &amp;
+          <a href="https://github.com/mochizukithr/llm-x-reader"
+            >LLM-X-Reader</a
+          >
+        </p>
+      </footer>
+    </div>
+  </body>
+</html>

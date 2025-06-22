@@ -1,0 +1,45 @@
+{% extends "base.html" %} {% block title %}{{ article.title|striptags }} - {{
+SITENAME }}{% endblock %} {% block content %}
+<article>
+  <header>
+    <h1>{{ article.title }}</h1>
+    <div class="article-meta">
+      {% if article.author %}
+      <span>作者: {{ article.author }}</span>
+      {% endif %} {% if article.date %}
+      <span>日付: {{ article.locale_date }}</span>
+      {% endif %} {% if article.category %}
+      <span
+        >カテゴリ:
+        <a href="{{ SITEURL }}/{{ article.category.url }}"
+          >{{ article.category }}</a
+        ></span
+      >
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="article-content">{{ article.content }}</div>
+
+  {% if article.tags %}
+  <footer class="article-tags">
+    <h3>タグ:</h3>
+    {% for tag in article.tags %}
+    <span class="tag">{{ tag }}</span>{% if not loop.last %}, {% endif %} {%
+    endfor %}
+  </footer>
+  {% endif %}
+</article>
+
+<nav class="article-nav">
+  {% if article.prev_article %}
+  <a href="{{ SITEURL }}/{{ article.prev_article.url }}"
+    >← {{ article.prev_article.title }}</a
+  >
+  {% endif %} {% if article.next_article %}
+  <a href="{{ SITEURL }}/{{ article.next_article.url }}"
+    >{{ article.next_article.title }} →</a
+  >
+  {% endif %}
+</nav>
+{% endblock %}

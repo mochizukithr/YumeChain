@@ -5,6 +5,7 @@ import os
 import json
 from pathlib import Path
 from typing import Dict, Any
+from datetime import datetime
 from rich.console import Console
 
 class FileManager:
@@ -95,12 +96,63 @@ class FileManager:
         
         return plot_data[arc][episode_str]
     
+    def generate_yaml_frontmatter(self, title: str, arc: str, episode: int, content: str) -> str:
+        """YAMLフロントマターを生成"""
+        # 設定ファイルから情報を読み取り
+        try:
+            setting_content = self.read_setting(title)
+        except:
+            setting_content = ""
+        
+        # プロットから情報を取得（存在する場合）
+        try:
+            plot_data = self.read_plot(title)
+            episode_plot = plot_data.get(arc, {}).get(str(episode), "")
+            # プロットの最初の行をdescriptionとして使用
+            description = episode_plot.split('\n')[0][:100] + "..." if episode_plot else ""
+        except:
+            description = ""
+        
+        # 本文から章タイトルを抽出
+        chapter_title = ""
+        content_lines = content.strip().split('\n')
+        for line in content_lines:
+            if line.startswith('# '):
+                chapter_title = line[2:].strip()
+                break
+        
+        if not chapter_title:
+            chapter_title = f"第{episode}話"
+        
+        # 現在の日付を取得
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        
+        # YAMLフロントマターを生成
+        yaml_frontmatter = f"""---
+title: "{title}《{arc}》"
+author: "Gemini"
+date: "{current_date}"
+lang: "ja"
+description: "{description or f'現代の知識を持ったまま過去に転生した主人公の物語。'}"
+tags: ["転生", "歴史改変", "技術", "昭和", "成長"]
+series: "{title}シリーズ"
+volume: 1
+chapter: "{chapter_title}"
+---
+
+"""
+        return yaml_frontmatter
+
     def save_episode(self, title: str, arc: str, episode: int, content: str) -> None:
-        """エピソードをMarkdownファイルに保存"""
+        """エピソードをPandoc対応Markdownファイルに保存"""
         stories_dir = self.get_novel_dir(title) / "stories"
         episode_file = stories_dir / f"{arc}_{episode:02d}.md"
         
-        episode_file.write_text(content, encoding='utf-8')
+        # YAMLフロントマターを追加
+        yaml_frontmatter = self.generate_yaml_frontmatter(title, arc, episode, content)
+        full_content = yaml_frontmatter + content
+        
+        episode_file.write_text(full_content, encoding='utf-8')
         print(f"Episode saved to: {episode_file}")
     
     def episode_exists(self, title: str, arc: str, episode: int) -> bool:

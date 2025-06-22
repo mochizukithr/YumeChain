@@ -1,0 +1,38 @@
+{% extends "base.html" %} {% block content %}
+<div class="articles-list">
+  <h2>小説一覧</h2>
+  {% if articles %}
+  <ul>
+    {% for article in articles_page.object_list %}
+    <li>
+      <a href="{{ SITEURL }}/{{ article.url }}">{{ article.title }}</a>
+      <div class="article-meta">
+        {% if article.author %}作者: {{ article.author }} | {% endif %} {% if
+        article.date %}{{ article.locale_date }}{% endif %} {% if
+        article.summary %}
+        <div class="article-summary">{{ article.summary }}</div>
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>記事が見つかりませんでした。</p>
+  {% endif %}
+</div>
+
+{% if articles_page.has_other_pages() %}
+<nav class="pagination">
+  {% if articles_page.has_previous() %}
+  <a href="{{ SITEURL }}/{{ articles_previous_page.url }}">&larr; 前のページ</a>
+  {% endif %}
+
+  <span class="page-info">
+    ページ {{ articles_page.number }} / {{ articles_paginator.num_pages }}
+  </span>
+
+  {% if articles_page.has_next() %}
+  <a href="{{ SITEURL }}/{{ articles_next_page.url }}">次のページ &rarr;</a>
+  {% endif %}
+</nav>
+{% endif %} {% endblock %}
