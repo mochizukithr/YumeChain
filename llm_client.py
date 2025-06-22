@@ -24,9 +24,23 @@ class LLMClient:
         
         model_name = os.getenv('GEMINI_MODEL', 'gemini-pro')  # デフォルトはgemini-pro
         
+        # 生成パラメータを環境変数から取得
+        temperature = float(os.getenv('GEMINI_TEMPERATURE', '1.0'))
+        top_p = float(os.getenv('GEMINI_TOP_P', '0.95'))
+        
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(model_name)
+        
+        # GenerationConfigを設定
+        generation_config = genai.types.GenerationConfig(
+            temperature=temperature,
+            top_p=top_p,
+        )
+        
+        self.model = genai.GenerativeModel(model_name, generation_config=generation_config)
         self.console = Console()
+        
+        # 設定情報をログ出力
+        self.console.print(f"[dim]モデル設定: {model_name}, Temperature: {temperature}, Top-p: {top_p}[/dim]")
         
         # トークン使用量を追跡
         self.total_input_tokens = 0
