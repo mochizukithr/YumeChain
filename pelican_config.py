@@ -39,8 +39,24 @@ DISPLAY_PAGES_ON_MENU = True
 DISPLAY_CATEGORIES_ON_MENU = True
 
 # 記事の表示設定
-ARTICLE_ORDER_BY = 'basename'  # ファイル名順で並び替え
+ARTICLE_ORDER_BY = 'date'  # 日付順で並び替え
 DEFAULT_CATEGORY = 'Stories'
+
+# 隣接記事の設定
+WITH_FUTURE_DATES = True  # 未来の日付の記事も含める
+DEFAULT_PAGINATION = 10
+REVERSE_CATEGORY_ORDER = False  # カテゴリ順序を逆にしない
+
+# Pelicanの記事順序とナビゲーション
+# デフォルトでは、Pelicanは日付順でprev/nextを決定します
+# prev_article は現在の記事より古い記事（前の記事）
+# next_article は現在の記事より新しい記事（次の記事）
+
+# 記事のURL設定（prev/nextナビゲーションに影響する可能性）
+ARTICLE_URL = '{slug}.html'
+ARTICLE_SAVE_AS = '{slug}.html'
+
+# テンプレートの設定
 DIRECT_TEMPLATES = ['index', 'tags', 'categories', 'archives']
 PAGINATED_TEMPLATES = {
     'index': None,
@@ -48,6 +64,15 @@ PAGINATED_TEMPLATES = {
     'category': None,
     'author': None,
 }
+
+# 日付ベースのページネーション設定
+# dates_next_page と dates_prev_page を有効にするため
+DISPLAY_PAGES_ON_MENU = True
+DISPLAY_CATEGORIES_ON_MENU = True
+
+# 日付ベースのアーカイブとナビゲーション
+YEAR_ARCHIVE_SAVE_AS = 'archives/{date:%Y}/index.html'
+MONTH_ARCHIVE_SAVE_AS = 'archives/{date:%Y}/{date:%b}/index.html'
 
 # マークダウンの拡張機能
 MARKDOWN = {
@@ -60,10 +85,6 @@ MARKDOWN = {
     },
     'output_format': 'html5',
 }
-
-# 記事のURL形式（シンプルなスラッグベース）
-ARTICLE_URL = '{slug}.html'
-ARTICLE_SAVE_AS = '{slug}.html'
 
 # カテゴリのURL形式
 CATEGORY_URL = 'category/{slug}.html'
@@ -84,6 +105,16 @@ EXTRA_PATH_METADATA = {
 # プラグイン
 PLUGIN_PATHS = []
 PLUGINS = []
+
+# ページネーション設定
+PAGINATION_PATTERNS = (
+    (1, '{url}', '{save_as}'),
+    (2, '{base_name}/page/{number}/', '{base_name}/page/{number}/index.html'),
+)
+
+# 隣接記事の設定（prev/next）
+# Pelicanは記事を日付順に並べ、その順序でprev/nextを決定
+# 古い記事 <- prev_article | current_article | next_article -> 新しい記事
 
 # 開発サーバー設定
 BIND = '127.0.0.1'

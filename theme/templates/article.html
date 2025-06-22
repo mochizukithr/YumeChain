@@ -32,14 +32,118 @@ SITENAME }}{% endblock %} {% block content %}
 </article>
 
 <nav class="article-nav">
-  {% if article.prev_article %}
-  <a href="{{ SITEURL }}/{{ article.prev_article.url }}"
-    >← {{ article.prev_article.title }}</a
-  >
-  {% endif %} {% if article.next_article %}
-  <a href="{{ SITEURL }}/{{ article.next_article.url }}"
-    >{{ article.next_article.title }} →</a
-  >
-  {% endif %}
+  <div class="nav-prev">
+    {% set nav_results = namespace(manual=None, chapter=None, slug=None) %} {%
+    for art in articles %} {% if art.category == article.category %} {% if
+    art.date < article.date %} {% if nav_results.manual is none or art.date >
+    nav_results.manual.date %} {% set nav_results.manual = art %} {% endif %} {%
+    endif %} {% if art.chapter and article.chapter %} {% if art.chapter|int ==
+    (article.chapter|int - 1) %} {% set nav_results.chapter = art %} {% endif %}
+    {% endif %}
+    <!-- Slug-based navigation -->
+    {% if art.slug.endswith('01') and article.slug.endswith('02') %} {% set
+    nav_results.slug = art %} {% endif %} {% if art.slug.endswith('02') and
+    article.slug.endswith('03') %} {% set nav_results.slug = art %} {% endif %}
+    {% endif %} {% endfor %} {% if dates_prev_page %}
+    <a
+      href="{{ SITEURL }}/{{ dates_prev_page.url }}"
+      class="nav-link prev-link"
+    >
+      <span class="nav-label">← 前の話</span>
+      <span class="nav-title">{{ dates_prev_page.title }}</span>
+    </a>
+    {% elif nav_results.slug %}
+    <a
+      href="{{ SITEURL }}/{{ nav_results.slug.url }}"
+      class="nav-link prev-link"
+    >
+      <span class="nav-label">← 前の話</span>
+      <span class="nav-title">{{ nav_results.slug.title }}</span>
+    </a>
+    {% elif nav_results.chapter %}
+    <a
+      href="{{ SITEURL }}/{{ nav_results.chapter.url }}"
+      class="nav-link prev-link"
+    >
+      <span class="nav-label">← 前の話</span>
+      <span class="nav-title">{{ nav_results.chapter.title }}</span>
+    </a>
+    {% elif article.prev_article %}
+    <a
+      href="{{ SITEURL }}/{{ article.prev_article.url }}"
+      class="nav-link prev-link"
+    >
+      <span class="nav-label">← 前の話</span>
+      <span class="nav-title">{{ article.prev_article.title }}</span>
+    </a>
+    {% elif nav_results.manual %}
+    <a
+      href="{{ SITEURL }}/{{ nav_results.manual.url }}"
+      class="nav-link prev-link"
+    >
+      <span class="nav-label">← 前の話</span>
+      <span class="nav-title">{{ nav_results.manual.title }}</span>
+    </a>
+    {% else %}
+    <div class="nav-placeholder"><!-- 前の話がありません --></div>
+    {% endif %}
+  </div>
+
+  <div class="nav-next">
+    {% set nav_next_results = namespace(manual=None, chapter=None, slug=None) %}
+    {% for art in articles %} {% if art.category == article.category %} {% if
+    art.date > article.date %} {% if nav_next_results.manual is none or art.date
+    < nav_next_results.manual.date %} {% set nav_next_results.manual = art %} {%
+    endif %} {% endif %} {% if art.chapter and article.chapter %} {% if
+    art.chapter|int == (article.chapter|int + 1) %} {% set
+    nav_next_results.chapter = art %} {% endif %} {% endif %}
+    <!-- Slug-based navigation -->
+    {% if art.slug.endswith('02') and article.slug.endswith('01') %} {% set
+    nav_next_results.slug = art %} {% endif %} {% if art.slug.endswith('03') and
+    article.slug.endswith('02') %} {% set nav_next_results.slug = art %} {%
+    endif %} {% endif %} {% endfor %} {% if dates_next_page %}
+    <a
+      href="{{ SITEURL }}/{{ dates_next_page.url }}"
+      class="nav-link next-link"
+    >
+      <span class="nav-label">次の話 →</span>
+      <span class="nav-title">{{ dates_next_page.title }}</span>
+    </a>
+    {% elif nav_next_results.slug %}
+    <a
+      href="{{ SITEURL }}/{{ nav_next_results.slug.url }}"
+      class="nav-link next-link"
+    >
+      <span class="nav-label">次の話 →</span>
+      <span class="nav-title">{{ nav_next_results.slug.title }}</span>
+    </a>
+    {% elif nav_next_results.chapter %}
+    <a
+      href="{{ SITEURL }}/{{ nav_next_results.chapter.url }}"
+      class="nav-link next-link"
+    >
+      <span class="nav-label">次の話 →</span>
+      <span class="nav-title">{{ nav_next_results.chapter.title }}</span>
+    </a>
+    {% elif article.next_article %}
+    <a
+      href="{{ SITEURL }}/{{ article.next_article.url }}"
+      class="nav-link next-link"
+    >
+      <span class="nav-label">次の話 →</span>
+      <span class="nav-title">{{ article.next_article.title }}</span>
+    </a>
+    {% elif nav_next_results.manual %}
+    <a
+      href="{{ SITEURL }}/{{ nav_next_results.manual.url }}"
+      class="nav-link next-link"
+    >
+      <span class="nav-label">次の話 →</span>
+      <span class="nav-title">{{ nav_next_results.manual.title }}</span>
+    </a>
+    {% else %}
+    <div class="nav-placeholder"><!-- 次の話がありません --></div>
+    {% endif %}
+  </div>
 </nav>
 {% endblock %}

@@ -213,29 +213,37 @@ slug: {slug}
             return False
         
         try:
-            # HTTPサーバーを起動
+            # Pelicanの開発サーバーを起動（autoreload有効）
             cmd = [
-                "python", "-m", "http.server", str(port),
-                "--directory", str(output_dir)
+                "pelican",
+                "--listen",
+                "--autoreload",
+                "--bind", "127.0.0.1",
+                "--port", str(port),
+                "-s", str(self.temp_dir / "pelicanconf.py"),
+                "-o", str(output_dir)
             ]
             
-            self.console.print(f"[cyan]🌐 サーバーを起動中... http://localhost:{port}[/cyan]")
+            self.console.print(f"[cyan]🌐 Pelicanサーバーを起動中... http://localhost:{port}[/cyan]")
+            self.console.print("[dim]autoreload有効 - ファイル変更時に自動リビルドします[/dim]")
             
             self.server_process = subprocess.Popen(
                 cmd,
+                cwd=self.temp_dir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
             
             # サーバーの起動を少し待つ
-            time.sleep(2)
+            time.sleep(3)
             
             # ブラウザを開く
             if auto_open:
                 threading.Timer(1.0, lambda: webbrowser.open(f"http://localhost:{port}")).start()
             
-            self.console.print(f"[green]✓ サーバー起動完了[/green]")
+            self.console.print(f"[green]✓ Pelicanサーバー起動完了[/green]")
             self.console.print(f"[dim]ブラウザで http://localhost:{port} を開いてください[/dim]")
+            self.console.print("[dim]ファイルが変更されると自動的にリビルドされます[/dim]")
             self.console.print("[dim]サーバーを停止するには Ctrl+C を押してください[/dim]")
             
             return True

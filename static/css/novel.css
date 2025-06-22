@@ -218,24 +218,65 @@ nav a:hover {
   border-top: 1px solid #dee2e6;
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 20px;
 }
 
-.article-nav a {
-  padding: 10px 20px;
+.nav-prev,
+.nav-next {
+  flex: 1;
+  max-width: 45%;
+}
+
+.nav-prev {
+  text-align: left;
+}
+
+.nav-next {
+  text-align: right;
+}
+
+.nav-link {
+  display: block;
+  padding: 15px 20px;
   background-color: #f8f9fa;
   border: 1px solid #dee2e6;
-  border-radius: 5px;
+  border-radius: 8px;
   text-decoration: none;
   color: #495057;
-  font-weight: 500;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.article-nav a:hover {
+.nav-link:hover {
   background-color: #007bff;
   color: white;
   text-decoration: none;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 123, 255, 0.2);
+}
+
+.nav-label {
+  display: block;
+  font-size: 0.85em;
+  color: #6c757d;
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+
+.nav-link:hover .nav-label {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.nav-title {
+  display: block;
+  font-weight: 500;
+  line-height: 1.3;
+  font-size: 0.95em;
+}
+
+.nav-placeholder {
+  height: 1px;
 }
 
 /* 記事タグ */
@@ -324,6 +365,26 @@ footer {
   nav ul {
     flex-direction: column;
     gap: 10px;
+  }
+
+  /* モバイル用の記事ナビゲーション */
+  .article-nav {
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .nav-prev,
+  .nav-next {
+    max-width: 100%;
+    text-align: center;
+  }
+
+  .nav-link {
+    padding: 12px 15px;
+  }
+
+  .nav-title {
+    font-size: 0.9em;
   }
 }
 
