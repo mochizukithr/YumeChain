@@ -109,20 +109,28 @@ class LLMClient:
                 self.console.print(f"[red]✗ エラー (所要時間: {elapsed_time:.1f}秒): {str(e)}[/red]")
             raise Exception(f"LLM API error: {str(e)}")
     
-    def generate_plot(self, setting_content: str) -> Dict[str, Any]:
+    def generate_plot(self, setting_content: str, target_arc: str = None) -> Dict[str, Any]:
         """プロット生成"""
-        from prompt_templates import PLOT_GENERATION_PROMPT
+        from prompt_templates import PLOT_GENERATION_PROMPT, ARC_SPECIFIC_PLOT_GENERATION_PROMPT
         
         self.console.print("[bold blue]📖 プロット生成を開始します[/bold blue]")
         
+        if target_arc:
+            # 特定のアークのプロット生成
+            self.console.print(f"[dim]対象編: {target_arc}[/dim]")
+            template = ARC_SPECIFIC_PLOT_GENERATION_PROMPT
+            prompt = template.format(setting_content=setting_content, target_arc=target_arc)
+        else:
+            # 全体のプロット生成
+            template = PLOT_GENERATION_PROMPT
+            prompt = template.format(setting_content=setting_content)
+        
         # プロンプトテンプレートのサイズを確認
-        template_size = len(PLOT_GENERATION_PROMPT) - len("{setting_content}")  # プレースホルダー分を除く
-        self.console.print(f"[dim]プロンプトテンプレート: {template_size}文字, {self.count_tokens(PLOT_GENERATION_PROMPT.replace('{setting_content}', ''))}トークン[/dim]")
+        template_size = len(template) - len("{setting_content}") - (len("{target_arc}") if target_arc else 0)
+        self.console.print(f"[dim]プロンプトテンプレート: {template_size}文字, {self.count_tokens(template.replace('{setting_content}', '').replace('{target_arc}', '' if target_arc else ''))}トークン[/dim]")
         
         # 設定ファイルのトークン数をログ出力
         self.log_token_info(setting_content, "設定ファイル")
-        
-        prompt = PLOT_GENERATION_PROMPT.format(setting_content=setting_content)
         
         # プロンプト全体のサイズを確認
         self.console.print(f"[dim]プロンプトテンプレート適用後の全体サイズ確認[/dim]")

@@ -67,9 +67,19 @@ class FileManager:
         
         return combined_content
     
-    def save_plot(self, title: str, plot_data: Dict[str, Any]) -> None:
+    def save_plot(self, title: str, plot_data: Dict[str, Any], merge: bool = False) -> None:
         """プロットをJSONファイルに保存"""
         plot_file = self.get_novel_dir(title) / "plot.json"
+        
+        if merge and plot_file.exists():
+            # 既存のプロットとマージ
+            try:
+                existing_data = self.read_plot(title)
+                existing_data.update(plot_data)
+                plot_data = existing_data
+            except Exception as e:
+                print(f"Warning: Could not merge with existing plot: {e}")
+        
         with open(plot_file, 'w', encoding='utf-8') as f:
             json.dump(plot_data, f, ensure_ascii=False, indent=2)
         print(f"Plot saved to: {plot_file}")

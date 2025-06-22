@@ -56,6 +56,7 @@ MARKDOWN = {
         'markdown.extensions.extra': {},
         'markdown.extensions.meta': {},
         'markdown.extensions.toc': {'permalink': True},
+        'markdown.extensions.nl2br': {},  # 段落内改行を<br>タグに変換
     },
     'output_format': 'html5',
 }
