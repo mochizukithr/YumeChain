@@ -43,7 +43,7 @@ cp .env.example .env
 LLM_PROVIDER=gemini
 
 # デフォルト設定（全処理共通）
-LLM_MODEL=gemini-1.5-flash
+LLM_MODEL=gemini/gemini-1.5-flash
 LLM_TEMPERATURE=1.0
 LLM_TOP_P=0.95
 
@@ -56,12 +56,12 @@ AZURE_API_KEY=your_azure_api_key_here
 AZURE_API_BASE=https://your-resource.openai.azure.com/
 
 # プロット生成専用設定（オプション）
-PLOT_MODEL=gemini-1.5-flash
+PLOT_MODEL=gemini/gemini-1.5-flash
 PLOT_TEMPERATURE=0.8
 PLOT_TOP_P=0.9
 
 # エピソード生成専用設定（オプション）
-EPISODE_MODEL=gemini-1.5-flash
+EPISODE_MODEL=gemini/gemini-1.5-flash
 EPISODE_TEMPERATURE=1.0
 EPISODE_TOP_P=0.95
 ```
@@ -76,9 +76,9 @@ EPISODE_TOP_P=0.95
 
 **Gemini:**
 
-- `gemini-1.5-flash` (推奨、高速)
-- `gemini-1.5-pro` (高品質)
-- `gemini-2.5-flash` (最新、高性能)
+- `gemini/gemini-1.5-flash` (推奨、高速)
+- `gemini/gemini-1.5-pro` (高品質)
+- `gemini/gemini-2.0-flash` (最新、高性能)
 
 **Anthropic:**
 
@@ -98,6 +98,14 @@ EPISODE_TOP_P=0.95
 LLM_PROVIDER=openai
 LLM_MODEL=gpt-4o-mini
 OPENAI_API_KEY=your_actual_api_key
+```
+
+**Gemini を使用する場合（デフォルト）:**
+
+```bash
+LLM_PROVIDER=gemini
+LLM_MODEL=gemini/gemini-1.5-flash
+GEMINI_API_KEY=your_actual_api_key
 ```
 
 **Anthropic を使用する場合:**

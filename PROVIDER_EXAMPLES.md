@@ -11,7 +11,7 @@
 
 ```bash
 LLM_PROVIDER=gemini
-LLM_MODEL=gemini-1.5-flash
+LLM_MODEL=gemini/gemini-1.5-flash
 GEMINI_API_KEY=your_actual_gemini_api_key
 ```
 
@@ -46,7 +46,7 @@ AZURE_API_BASE=https://your-resource.openai.azure.com/
 
 ```bash
 # プロット生成は構造化重視でGemini Flash
-PLOT_MODEL=gemini-1.5-flash
+PLOT_MODEL=gemini/gemini-1.5-flash
 PLOT_TEMPERATURE=0.8
 
 # エピソード生成は創造性重視でGPT-4o
@@ -57,6 +57,7 @@ EPISODE_TEMPERATURE=1.2
 ## 注意事項
 
 - 使用するプロバイダーに対応する API キーが必要です
+- **Gemini モデルは `gemini/` プレフィックスが必要**（例: `gemini/gemini-1.5-flash`）
 - モデル名は各プロバイダーの仕様に合わせて正確に記述してください
 - Azure の場合、デプロイメント名を指定します（モデル名ではありません）
 - レート制限やコストに注意してください

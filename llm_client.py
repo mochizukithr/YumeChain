@@ -33,7 +33,7 @@ class LLMClient:
         # モデル名の取得（優先度: 引数 > 環境変数 > デフォルト）
         default_models = {
             'openai': 'gpt-4o-mini',
-            'gemini': 'gemini-1.5-flash',
+            'gemini': 'gemini/gemini-2.5-flash',
             'anthropic': 'claude-3-haiku-20240307',
             'azure': 'gpt-4o-mini'
         }
@@ -42,7 +42,7 @@ class LLMClient:
             model_name or 
             os.getenv(f'{config_prefix}_MODEL') or 
             os.getenv('LLM_MODEL') or 
-            default_models.get(self.provider, 'gemini-1.5-flash')
+            default_models.get(self.provider, 'gemini-2.5-flash')
         )
         
         # 生成パラメータの取得（優先度: 引数 > 環境変数 > デフォルト）
@@ -72,8 +72,11 @@ class LLMClient:
     
     def _setup_litellm(self):
         """LiteLLMの設定"""
-        # ログレベル設定
-        litellm.set_verbose = False
+        # デバッグモードの設定（エラー時に詳細情報を表示）
+        if os.getenv('LITELLM_DEBUG'):
+            litellm.set_verbose = True
+        else:
+            litellm.set_verbose = False
         
         # プロバイダーごとのAPI キー設定
         if self.provider == 'openai':
@@ -156,19 +159,58 @@ class LLMClient:
                     self.console.print("[dim]API呼び出し中...[/dim]")
                     
                     # LiteLLMを使用してAPIを呼び出し
+                    # Geminiの安全設定を調整（コンテンツフィルター緩和）
+                    extra_params = {}
+                    if self.provider == 'gemini':
+                        # 環境変数でGeminiの安全設定を制御
+                        if os.getenv('GEMINI_SAFETY_DISABLED', 'false').lower() == 'true':
+                            extra_params["safety_settings"] = [
+                                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+                            ]
+                            self.console.print(f"[dim]Gemini安全フィルターを無効化[/dim]")
+                    
                     response = litellm.completion(
                         model=self.model_name,
                         messages=[{"role": "user", "content": prompt}],
                         temperature=self.temperature,
-                        top_p=self.top_p
+                        top_p=self.top_p,
+                        **extra_params
                     )
                     
                     elapsed_time = time.time() - start_time
                     response_text = response.choices[0].message.content
-                    response_length = len(response_text) if response_text else 0
+                    
+                    # レスポンステキストの検証
+                    if response_text is None:
+                        # finish_reasonを確認してコンテンツフィルターの場合は特別な処理
+                        finish_reason = response.choices[0].finish_reason if response.choices else "unknown"
+                        
+                        if finish_reason == 'content_filter':
+                            self.console.print(f"[red]✗ コンテンツフィルターによってレスポンスがブロックされました[/red]")
+                            self.console.print(f"[yellow]⚠️ プロンプトの内容を確認し、以下を試してください：[/yellow]")
+                            self.console.print(f"[yellow]  - より穏やかな表現に変更[/yellow]")
+                            self.console.print(f"[yellow]  - 暴力的、性的、または不適切な内容を削除[/yellow]")
+                            self.console.print(f"[yellow]  - 異なるモデル（gemini-1.5-flash など）を試す[/yellow]")
+                            self.console.print(f"[yellow]  - OpenAIなど他のプロバイダーに切り替える[/yellow]")
+                            
+                            # プロンプトの一部を表示してデバッグを支援
+                            if os.getenv('LITELLM_LOG') == 'DEBUG':
+                                prompt_preview = prompt[:500] + "..." if len(prompt) > 500 else prompt
+                                self.console.print(f"[dim]プロンプト先頭500文字: {prompt_preview}[/dim]")
+                            
+                            raise Exception(f"Content filtered by safety mechanisms (reason: {finish_reason})")
+                        else:
+                            self.console.print(f"[red]✗ API から空のレスポンスが返されました (finish_reason: {finish_reason})[/red]")
+                            self.console.print(f"[dim]レスポンス詳細: {response}[/dim]")
+                            raise Exception(f"API returned None response (finish_reason: {finish_reason})")
+                    
+                    response_length = len(response_text)
                     
                     # レスポンスのトークン数をカウント
-                    response_token_count = self.count_tokens(response_text) if response_text else 0
+                    response_token_count = self.count_tokens(response_text)
                     total_tokens = prompt_token_count + response_token_count
                     
                     # トークン使用量を記録（レスポンスから取得できる場合はそれを使用）
@@ -187,17 +229,66 @@ class LLMClient:
                     
                     return response_text
             else:
+                # Geminiの安全設定を調整（コンテンツフィルター緩和）
+                extra_params = {}
+                if self.provider == 'gemini':
+                    # 環境変数でGeminiの安全設定を制御
+                    if os.getenv('GEMINI_SAFETY_DISABLED', 'false').lower() == 'true':
+                        extra_params["safety_settings"] = [
+                            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+                        ]
+                        self.console.print(f"[dim]Gemini安全フィルターを無効化[/dim]")
+                
                 response = litellm.completion(
                     model=self.model_name,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=self.temperature,
-                    top_p=self.top_p
+                    top_p=self.top_p,
+                    **extra_params
                 )
-                return response.choices[0].message.content
+                response_text = response.choices[0].message.content
+                
+                # レスポンステキストの検証
+                if response_text is None:
+                    # finish_reasonを確認してコンテンツフィルターの場合は特別な処理
+                    finish_reason = response.choices[0].finish_reason if response.choices else "unknown"
+                    
+                    if finish_reason == 'content_filter':
+                        self.console.print(f"[red]✗ コンテンツフィルターによってレスポンスがブロックされました[/red]")
+                        self.console.print(f"[yellow]⚠️ プロンプトの内容を確認し、以下を試してください：[/yellow]")
+                        self.console.print(f"[yellow]  - より穏やかな表現に変更[/yellow]")
+                        self.console.print(f"[yellow]  - 暴力的、性的、または不適切な内容を削除[/yellow]")
+                        self.console.print(f"[yellow]  - 異なるモデル（gemini-1.5-flash など）を試す[/yellow]")
+                        self.console.print(f"[yellow]  - OpenAIなど他のプロバイダーに切り替える[/yellow]")
+                        
+                        # プロンプトの一部を表示してデバッグを支援
+                        if os.getenv('LITELLM_LOG') == 'DEBUG':
+                            prompt_preview = prompt[:500] + "..." if len(prompt) > 500 else prompt
+                            self.console.print(f"[dim]プロンプト先頭500文字: {prompt_preview}[/dim]")
+                        
+                        raise Exception(f"Content filtered by safety mechanisms (reason: {finish_reason})")
+                    else:
+                        self.console.print(f"[red]✗ API から空のレスポンスが返されました (finish_reason: {finish_reason})[/red]")
+                        self.console.print(f"[dim]レスポンス詳細: {response}[/dim]")
+                        raise Exception(f"API returned None response (finish_reason: {finish_reason})")
+                
+                return response_text
         except Exception as e:
             if progress_description:
                 elapsed_time = time.time() - start_time if 'start_time' in locals() else 0
                 self.console.print(f"[red]✗ エラー (所要時間: {elapsed_time:.1f}秒): {str(e)}[/red]")
+                
+                # LiteLLMの詳細エラー情報を出力
+                if hasattr(e, 'response') and e.response:
+                    self.console.print(f"[dim]HTTPステータス: {e.response.status_code}[/dim]")
+                    self.console.print(f"[dim]レスポンス: {e.response.text}[/dim]")
+                
+                # APIキーやモデル設定の確認を促す
+                self.console.print(f"[yellow]⚠️ 設定確認: プロバイダー={self.provider}, モデル={self.model_name}[/yellow]")
+                
             raise Exception(f"LLM API error: {str(e)}")
     
     def generate_plot(self, setting_content: str, target_arc: str = None) -> Dict[str, Any]:
