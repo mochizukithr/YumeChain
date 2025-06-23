@@ -11,4 +11,5 @@ dependencies = [
     "rich>=13.3.0",
     "pelican>=4.9.1",
     "markdown>=3.4.0",
+    "litellm>=1.0.0",
 ]

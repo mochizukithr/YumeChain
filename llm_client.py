@@ -5,7 +5,7 @@ import os
 import json
 import time
 from typing import Dict, Any, Optional
-import google.generativeai as genai
+import litellm
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
@@ -14,47 +14,104 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 load_dotenv()
 
 class LLMClient:
-    """Gemini APIを使用するLLMクライアント"""
+    """LiteLLMを使用してマルチプロバイダー対応のLLMクライアント"""
     
-    def __init__(self):
-        """初期化"""
-        api_key = os.getenv('GOOGLE_API_KEY')
-        if not api_key:
-            raise ValueError("GOOGLE_API_KEY environment variable is required")
+    def __init__(self, model_name: Optional[str] = None, temperature: Optional[float] = None, 
+                 top_p: Optional[float] = None, config_prefix: str = "LLM"):
+        """
+        初期化
         
-        model_name = os.getenv('GEMINI_MODEL', 'gemini-pro')  # デフォルトはgemini-pro
+        Args:
+            model_name: モデル名（指定しない場合は環境変数から取得）
+            temperature: Temperature値（指定しない場合は環境変数から取得）
+            top_p: Top-p値（指定しない場合は環境変数から取得）
+            config_prefix: 環境変数のプレフィックス（例: "LLM", "PLOT", "EPISODE"）
+        """
+        # プロバイダーの取得（デフォルトはgemini）
+        self.provider = os.getenv('LLM_PROVIDER', 'gemini')
         
-        # 生成パラメータを環境変数から取得
-        temperature = float(os.getenv('GEMINI_TEMPERATURE', '1.0'))
-        top_p = float(os.getenv('GEMINI_TOP_P', '0.95'))
+        # モデル名の取得（優先度: 引数 > 環境変数 > デフォルト）
+        default_models = {
+            'openai': 'gpt-4o-mini',
+            'gemini': 'gemini-1.5-flash',
+            'anthropic': 'claude-3-haiku-20240307',
+            'azure': 'gpt-4o-mini'
+        }
         
-        genai.configure(api_key=api_key)
-        
-        # GenerationConfigを設定
-        generation_config = genai.types.GenerationConfig(
-            temperature=temperature,
-            top_p=top_p,
+        self.model_name = (
+            model_name or 
+            os.getenv(f'{config_prefix}_MODEL') or 
+            os.getenv('LLM_MODEL') or 
+            default_models.get(self.provider, 'gemini-1.5-flash')
         )
         
-        self.model = genai.GenerativeModel(model_name, generation_config=generation_config)
+        # 生成パラメータの取得（優先度: 引数 > 環境変数 > デフォルト）
+        self.temperature = (
+            temperature if temperature is not None else
+            float(os.getenv(f'{config_prefix}_TEMPERATURE') or 
+                  os.getenv('LLM_TEMPERATURE') or '1.0')
+        )
+        
+        self.top_p = (
+            top_p if top_p is not None else
+            float(os.getenv(f'{config_prefix}_TOP_P') or 
+                  os.getenv('LLM_TOP_P') or '0.95')
+        )
+        
+        # LiteLLMの設定
+        self._setup_litellm()
+        
         self.console = Console()
         
         # 設定情報をログ出力
-        self.console.print(f"[dim]モデル設定: {model_name}, Temperature: {temperature}, Top-p: {top_p}[/dim]")
+        self.console.print(f"[dim]プロバイダー: {self.provider}, モデル: {self.model_name}, Temperature: {self.temperature}, Top-p: {self.top_p}[/dim]")
         
         # トークン使用量を追跡
         self.total_input_tokens = 0
         self.total_output_tokens = 0
     
+    def _setup_litellm(self):
+        """LiteLLMの設定"""
+        # ログレベル設定
+        litellm.set_verbose = False
+        
+        # プロバイダーごとのAPI キー設定
+        if self.provider == 'openai':
+            if not os.getenv('OPENAI_API_KEY'):
+                raise ValueError("OPENAI_API_KEY environment variable is required for OpenAI provider")
+        elif self.provider == 'gemini':
+            if not os.getenv('GEMINI_API_KEY'):
+                raise ValueError("GEMINI_API_KEY environment variable is required for Gemini provider")
+        elif self.provider == 'anthropic':
+            if not os.getenv('ANTHROPIC_API_KEY'):
+                raise ValueError("ANTHROPIC_API_KEY environment variable is required for Anthropic provider")
+        elif self.provider == 'azure':
+            if not os.getenv('AZURE_API_KEY'):
+                raise ValueError("AZURE_API_KEY environment variable is required for Azure provider")
+            if not os.getenv('AZURE_API_BASE'):
+                raise ValueError("AZURE_API_BASE environment variable is required for Azure provider")
+    
+    @classmethod
+    def create_for_plot_generation(cls) -> 'LLMClient':
+        """プロット生成用のLLMClientを作成"""
+        return cls(config_prefix="PLOT")
+    
+    @classmethod
+    def create_for_episode_generation(cls) -> 'LLMClient':
+        """エピソード生成用のLLMClientを作成"""
+        return cls(config_prefix="EPISODE")
+    
     def count_tokens(self, text: str) -> int:
         """テキストのトークン数をカウント"""
         try:
-            token_count = self.model.count_tokens(text)
-            return token_count.total_tokens
+            # LiteLLMを使用してトークン数をカウント
+            token_count = litellm.token_counter(model=self.model_name, text=text)
+            return token_count
         except Exception as e:
-            # トークンカウントでエラーが発生した場合は0を返す
+            # トークンカウントでエラーが発生した場合は推定値を返す
             self.console.print(f"[yellow]⚠️ トークンカウントエラー: {str(e)}[/yellow]")
-            return 0
+            # 大まかな推定（1トークン = 約4文字）
+            return len(text) // 4
     
     def log_token_info(self, text: str, label: str):
         """トークン情報をログ出力"""
@@ -93,30 +150,50 @@ class LLMClient:
                     # プロンプトのトークン数をカウント
                     prompt_token_count = self.count_tokens(prompt)
                     self.console.print(f"[dim]プロンプト: {len(prompt)}文字, {prompt_token_count}トークン[/dim]")
-                    self.console.print(f"[dim]モデル: {self.model.model_name}[/dim]")
+                    self.console.print(f"[dim]モデル: {self.model_name}[/dim]")
                     
                     # API呼び出し
                     self.console.print("[dim]API呼び出し中...[/dim]")
-                    response = self.model.generate_content(prompt)
+                    
+                    # LiteLLMを使用してAPIを呼び出し
+                    response = litellm.completion(
+                        model=self.model_name,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=self.temperature,
+                        top_p=self.top_p
+                    )
                     
                     elapsed_time = time.time() - start_time
-                    response_length = len(response.text) if response.text else 0
+                    response_text = response.choices[0].message.content
+                    response_length = len(response_text) if response_text else 0
                     
                     # レスポンスのトークン数をカウント
-                    response_token_count = self.count_tokens(response.text) if response.text else 0
+                    response_token_count = self.count_tokens(response_text) if response_text else 0
                     total_tokens = prompt_token_count + response_token_count
                     
-                    # トークン使用量を記録
-                    self.update_token_usage(prompt_token_count, response_token_count)
+                    # トークン使用量を記録（レスポンスから取得できる場合はそれを使用）
+                    if hasattr(response, 'usage') and response.usage:
+                        input_tokens = response.usage.prompt_tokens
+                        output_tokens = response.usage.completion_tokens
+                    else:
+                        input_tokens = prompt_token_count
+                        output_tokens = response_token_count
+                    
+                    self.update_token_usage(input_tokens, output_tokens)
                     
                     self.console.print(f"[green]✓ 完了[/green] (所要時間: {elapsed_time:.1f}秒)")
-                    self.console.print(f"[dim]レスポンス: {response_length}文字, {response_token_count}トークン[/dim]")
-                    self.console.print(f"[dim]合計トークン数: {total_tokens} (入力: {prompt_token_count}, 出力: {response_token_count})[/dim]")
+                    self.console.print(f"[dim]レスポンス: {response_length}文字, {output_tokens}トークン[/dim]")
+                    self.console.print(f"[dim]合計トークン数: {input_tokens + output_tokens} (入力: {input_tokens}, 出力: {output_tokens})[/dim]")
                     
-                    return response.text
+                    return response_text
             else:
-                response = self.model.generate_content(prompt)
-                return response.text
+                response = litellm.completion(
+                    model=self.model_name,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=self.temperature,
+                    top_p=self.top_p
+                )
+                return response.choices[0].message.content
         except Exception as e:
             if progress_description:
                 elapsed_time = time.time() - start_time if 'start_time' in locals() else 0
@@ -141,7 +218,8 @@ class LLMClient:
         
         # プロンプトテンプレートのサイズを確認
         template_size = len(template) - len("{setting_content}") - (len("{target_arc}") if target_arc else 0)
-        self.console.print(f"[dim]プロンプトテンプレート: {template_size}文字, {self.count_tokens(template.replace('{setting_content}', '').replace('{target_arc}', '' if target_arc else ''))}トークン[/dim]")
+        template_clean = template.replace('{setting_content}', '').replace('{target_arc}', '' if target_arc else '')
+        self.console.print(f"[dim]プロンプトテンプレート: {template_size}文字, {self.count_tokens(template_clean)}トークン[/dim]")
         
         # 設定ファイルのトークン数をログ出力
         self.log_token_info(setting_content, "設定ファイル")
@@ -188,7 +266,8 @@ class LLMClient:
         
         # プロンプトテンプレートのサイズを確認
         template_size = len(EPISODE_GENERATION_PROMPT) - len("{setting_content}") - len("{plot_content}")
-        self.console.print(f"[dim]プロンプトテンプレート: {template_size}文字, {self.count_tokens(EPISODE_GENERATION_PROMPT.replace('{setting_content}', '').replace('{plot_content}', ''))}トークン[/dim]")
+        template_clean = EPISODE_GENERATION_PROMPT.replace('{setting_content}', '').replace('{plot_content}', '')
+        self.console.print(f"[dim]プロンプトテンプレート: {template_size}文字, {self.count_tokens(template_clean)}トークン[/dim]")
         
         # 各コンテンツのトークン数をログ出力
         self.log_token_info(setting_content, "設定ファイル")
@@ -210,3 +289,158 @@ class LLMClient:
         self.log_token_info(episode_content, "生成されたエピソード")
         
         return episode_content
+    
+    def generate_episode_with_context(self, setting_content: str, arc: str, episode: int, 
+                                      plot_data: Dict[str, Any]) -> str:
+        """
+        前後のエピソード情報を含めてエピソード生成
+        
+        Args:
+            setting_content: 設定ファイルの内容
+            arc: 編名
+            episode: エピソード番号
+            plot_data: プロット全体のデータ
+        
+        Returns:
+            生成されたエピソード本文
+        """
+        from prompt_templates import EPISODE_GENERATION_WITH_CONTEXT_PROMPT, EPISODE_GENERATION_PROMPT
+        
+        self.console.print("[bold blue]📝 エピソード生成を開始します（前後情報付き）[/bold blue]")
+        
+        # 現在のエピソードのプロットを取得
+        current_plot = plot_data.get(arc, {}).get(str(episode), "")
+        if not current_plot:
+            raise ValueError(f"Episode {episode} not found in arc '{arc}'")
+        
+        # 前後のエピソードプロットを取得（ファイル構造ベース）
+        previous_plot = self._get_adjacent_episode_plot_by_file_order(plot_data, arc, episode, "previous")
+        next_plot = self._get_adjacent_episode_plot_by_file_order(plot_data, arc, episode, "next")
+        
+        # 前後の情報がある場合は詳細プロンプト、ない場合は通常プロンプトを使用
+        if previous_plot or next_plot:
+            template = EPISODE_GENERATION_WITH_CONTEXT_PROMPT
+            prompt = template.format(
+                setting_content=setting_content,
+                previous_plot=previous_plot,
+                current_plot=current_plot,
+                next_plot=next_plot
+            )
+        else:
+            # 前後の情報がない場合は従来のプロンプトを使用
+            template = EPISODE_GENERATION_PROMPT
+            prompt = template.format(
+                setting_content=setting_content,
+                plot_content=current_plot
+            )
+        
+        # プロンプトテンプレートのサイズを確認
+        template_placeholders = len("{setting_content}") + len("{previous_plot}") + len("{current_plot}") + len("{next_plot}")
+        template_size = len(template) - template_placeholders
+        self.console.print(f"[dim]プロンプトテンプレート: {template_size}文字[/dim]")
+        
+        # 各コンテンツのトークン数をログ出力
+        self.log_token_info(setting_content, "設定ファイル")
+        self.log_token_info(current_plot, "現在の話のプロット")
+        if previous_plot:
+            self.log_token_info(previous_plot, "前の話のプロット")
+        if next_plot:
+            self.log_token_info(next_plot, "次の話のプロット")
+        
+        # プロンプト全体のサイズを確認
+        self.console.print(f"[dim]プロンプトテンプレート適用後の全体サイズ確認[/dim]")
+        
+        episode_content = self.generate_text(prompt, "エピソード生成中...")
+        
+        self.console.print(f"[green]✓ エピソード生成完了![/green]")
+        
+        # 生成されたエピソードのサイズをログ出力
+        self.log_token_info(episode_content, "生成されたエピソード")
+        
+        return episode_content
+    
+    def _get_adjacent_episode_plot(self, plot_data: Dict[str, Any], arc: str, episode: int, 
+                                   label: str) -> str:
+        """
+        隣接するエピソードのプロットを取得
+        
+        Args:
+            plot_data: プロット全体のデータ
+            arc: 編名
+            episode: エピソード番号
+            label: ログ用のラベル（"前の話"、"次の話"など）
+        
+        Returns:
+            エピソードのプロット（存在しない場合は空文字列）
+        """
+        if episode <= 0:
+            return ""
+        
+        arc_data = plot_data.get(arc, {})
+        episode_plot = arc_data.get(str(episode), "")
+        
+        if episode_plot:
+            self.console.print(f"[dim]{label}の情報を取得: Episode {episode}[/dim]")
+        else:
+            self.console.print(f"[dim]{label}の情報: なし[/dim]")
+        
+        return episode_plot
+
+    def _get_adjacent_episode_plot_by_file_order(self, plot_data: Dict[str, Any], 
+                                                 current_arc: str, current_episode: int, 
+                                                 direction: str) -> str:
+        """
+        ファイル構造に基づいて隣接するエピソードのプロットを取得
+        chapter概念を考慮して編をまたいだ前後判定を行う
+        
+        Args:
+            plot_data: プロット全体のデータ
+            current_arc: 現在の編名
+            current_episode: 現在のエピソード番号
+            direction: "previous" または "next"
+        
+        Returns:
+            隣接するエピソードのプロット（存在しない場合は空文字列）
+        """
+        # 全エピソードを（arc, episode）のタプルリストで取得
+        all_episodes = []
+        for arc_name, episodes in plot_data.items():
+            for ep_num_str, plot in episodes.items():
+                try:
+                    ep_num = int(ep_num_str)
+                    all_episodes.append((arc_name, ep_num, plot))
+                except ValueError:
+                    continue
+        
+        # ファイル名順でソート（arc名でソート、その後episode番号でソート）
+        all_episodes.sort(key=lambda x: (x[0], x[1]))
+        
+        # 現在のエピソードのインデックスを検索
+        current_index = None
+        for i, (arc_name, ep_num, plot) in enumerate(all_episodes):
+            if arc_name == current_arc and ep_num == current_episode:
+                current_index = i
+                break
+        
+        if current_index is None:
+            self.console.print(f"[dim]現在のエピソード {current_arc}_{current_episode} が見つかりません[/dim]")
+            return ""
+        
+        # 前後のエピソードを取得
+        if direction == "previous":
+            target_index = current_index - 1
+            label = "前の話"
+        elif direction == "next":
+            target_index = current_index + 1
+            label = "次の話"
+        else:
+            return ""
+        
+        # インデックスが範囲内かチェック
+        if 0 <= target_index < len(all_episodes):
+            target_arc, target_episode, target_plot = all_episodes[target_index]
+            self.console.print(f"[dim]{label}の情報を取得: {target_arc}_{target_episode}[/dim]")
+            return target_plot
+        else:
+            self.console.print(f"[dim]{label}の情報: なし[/dim]")
+            return ""

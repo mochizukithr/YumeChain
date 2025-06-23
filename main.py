@@ -497,8 +497,8 @@ def handle_generate_plot_command():
                 console.print(f"Character file: {title}/character.md")
             return
         
-        # LLMでプロット生成
-        llm = LLMClient()
+        # LLMでプロット生成（プロット専用設定を使用）
+        llm = LLMClient.create_for_plot_generation()
         plot_data = llm.generate_plot(setting_content, target_arc=arc)
         
         # プロットを保存
@@ -590,6 +590,10 @@ def handle_generate_episode_command():
         try:
             setting_content = fm.read_all_settings(title)
             console.print(f"[green]✓ 設定ファイル読み込み完了[/green] ({len(setting_content)}文字)")
+            
+            # プロット全体を読み込み（前後の話の情報を取得するため）
+            plot_data = fm.read_plot(title)
+            console.print(f"[green]✓ プロット全体読み込み完了[/green]")
         except FileNotFoundError as e:
             console.print(f"[red]✗ エラー: {str(e)}[/red]")
             console.print("Please run 'generate-plot' first.")
@@ -599,14 +603,17 @@ def handle_generate_episode_command():
             console.print("[yellow]⚠️  Dry run mode - エピソード生成をスキップします[/yellow]")
             for episode in episode_list:
                 try:
-                    episode_plot = fm.get_episode_plot(title, arc, episode)
-                    console.print(f"[dim]Episode {episode}: {episode_plot[:50]}...[/dim]")
-                except ValueError as e:
+                    episode_plot = plot_data.get(arc, {}).get(str(episode), "")
+                    if episode_plot:
+                        console.print(f"[dim]Episode {episode}: {episode_plot[:50]}...[/dim]")
+                    else:
+                        console.print(f"[red]Episode {episode}: プロットが見つかりません[/red]")
+                except Exception as e:
                     console.print(f"[red]Episode {episode}: {str(e)}[/red]")
             return
         
-        # LLMクライアントを初期化
-        llm = LLMClient()
+        # LLMクライアントを初期化（エピソード専用設定を使用）
+        llm = LLMClient.create_for_episode_generation()
         
         # 各エピソードを処理
         for i, episode in enumerate(episode_list, 1):
@@ -620,7 +627,9 @@ def handle_generate_episode_command():
                 
                 # エピソードプロットを取得
                 try:
-                    episode_plot = fm.get_episode_plot(title, arc, episode)
+                    episode_plot = plot_data.get(arc, {}).get(str(episode), "")
+                    if not episode_plot:
+                        raise ValueError(f"Episode {episode} not found in arc '{arc}'")
                     console.print(f"[green]✓ エピソードプロット読み込み完了[/green] ({len(episode_plot)}文字)")
                 except ValueError as e:
                     console.print(f"[red]✗ エラー: {str(e)}[/red]")
@@ -629,7 +638,7 @@ def handle_generate_episode_command():
                 
                 # LLMでエピソード生成
                 console.print(f"[dim]🤖 LLMでエピソード {episode} を生成中...[/dim]")
-                episode_content = llm.generate_episode(setting_content, episode_plot)
+                episode_content = llm.generate_episode_with_context(setting_content, arc, episode, plot_data)
                 
                 # エピソードを保存
                 console.print(f"[dim]💾 エピソード {episode} を保存中...[/dim]")
@@ -815,8 +824,8 @@ def generate_plot(title: str, arc: str, dry_run: bool):
                 console.print(f"Character file: {title}/character.md")
             return
         
-        # LLMでプロット生成
-        llm = LLMClient()
+        # LLMでプロット生成（プロット専用設定を使用）
+        llm = LLMClient.create_for_plot_generation()
         plot_data = llm.generate_plot(setting_content, target_arc=arc)
         
         # プロットを保存
@@ -917,6 +926,10 @@ def generate_episode(title: str, arc: str, episodes: str, dry_run: bool, force: 
         try:
             setting_content = fm.read_all_settings(title)
             console.print(f"[green]✓ 設定ファイル読み込み完了[/green] ({len(setting_content)}文字)")
+            
+            # プロット全体を読み込み（前後の話の情報を取得するため）
+            plot_data = fm.read_plot(title)
+            console.print(f"[green]✓ プロット全体読み込み完了[/green]")
         except FileNotFoundError:
             console.print(f"[red]✗ エラー: setting.md not found in {title}/ directory[/red]")
             console.print(f"Please edit the template file that was created.")
@@ -926,14 +939,17 @@ def generate_episode(title: str, arc: str, episodes: str, dry_run: bool, force: 
             console.print("[yellow]⚠️  Dry run mode - エピソード生成をスキップします[/yellow]")
             for episode in episode_list:
                 try:
-                    episode_plot = fm.get_episode_plot(title, arc, episode)
-                    console.print(f"[dim]Episode {episode}: {episode_plot[:50]}...[/dim]")
-                except ValueError as e:
+                    episode_plot = plot_data.get(arc, {}).get(str(episode), "")
+                    if episode_plot:
+                        console.print(f"[dim]Episode {episode}: {episode_plot[:50]}...[/dim]")
+                    else:
+                        console.print(f"[red]Episode {episode}: プロットが見つかりません[/red]")
+                except Exception as e:
                     console.print(f"[red]Episode {episode}: {str(e)}[/red]")
             return
         
-        # LLMクライアントを初期化
-        llm = LLMClient()
+        # LLMクライアントを初期化（エピソード専用設定を使用）
+        llm = LLMClient.create_for_episode_generation()
         
         # 各エピソードを処理
         for i, episode in enumerate(episode_list, 1):
@@ -947,7 +963,9 @@ def generate_episode(title: str, arc: str, episodes: str, dry_run: bool, force: 
                 
                 # エピソードプロットを取得
                 try:
-                    episode_plot = fm.get_episode_plot(title, arc, episode)
+                    episode_plot = plot_data.get(arc, {}).get(str(episode), "")
+                    if not episode_plot:
+                        raise ValueError(f"Episode {episode} not found in arc '{arc}'")
                     console.print(f"[green]✓ エピソードプロット読み込み完了[/green] ({len(episode_plot)}文字)")
                 except ValueError as e:
                     console.print(f"[red]✗ エラー: {str(e)}[/red]")
@@ -956,7 +974,7 @@ def generate_episode(title: str, arc: str, episodes: str, dry_run: bool, force: 
                 
                 # LLMでエピソード生成
                 console.print(f"[dim]🤖 LLMでエピソード {episode} を生成中...[/dim]")
-                episode_content = llm.generate_episode(setting_content, episode_plot)
+                episode_content = llm.generate_episode_with_context(setting_content, arc, episode, plot_data)
                 
                 # エピソードを保存
                 console.print(f"[dim]💾 エピソード {episode} を保存中...[/dim]")

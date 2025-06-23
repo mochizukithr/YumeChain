@@ -1,11 +1,12 @@
 # 小説生成 CUI アプリ
 
-LLM（Gemini）を使って設定から小説を自動生成する Python アプリケーションです。
+LLM（OpenAI、Gemini、Anthropic など）を使って設定から小説を自動生成する Python アプリケーションです。
 
 ## 機能
 
 - 設定ファイル（Markdown）からプロット生成
 - プロットから各話の本文生成
+- 複数の LLM プロバイダー対応（OpenAI、Gemini、Anthropic、Azure）
 - CLI による簡単操作
 - ドライランモード対応
 
@@ -21,7 +22,7 @@ cd llm-x-reader
 2. 依存関係をインストール
 
 ```bash
-uv add google-generativeai click python-dotenv
+uv add google-generativeai click python-dotenv litellm
 ```
 
 3. 環境変数を設定
@@ -30,6 +31,101 @@ uv add google-generativeai click python-dotenv
 cp .env.example .env
 # .env ファイルを編集してGoogle API Keyを設定
 ```
+
+## LLM プロバイダー設定
+
+プロット生成とエピソード生成で異なる LLM プロバイダー、モデル、パラメータを設定できます。
+
+### 基本設定（.env ファイル）
+
+```bash
+# LLM プロバイダー設定（openai, gemini, anthropic, azure から選択）
+LLM_PROVIDER=gemini
+
+# デフォルト設定（全処理共通）
+LLM_MODEL=gemini-1.5-flash
+LLM_TEMPERATURE=1.0
+LLM_TOP_P=0.95
+
+# プロバイダー別 API キー
+OPENAI_API_KEY=your_openai_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
+GOOGLE_API_KEY=your_gemini_api_key_here  # 互換性のため
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+AZURE_API_KEY=your_azure_api_key_here
+AZURE_API_BASE=https://your-resource.openai.azure.com/
+
+# プロット生成専用設定（オプション）
+PLOT_MODEL=gemini-1.5-flash
+PLOT_TEMPERATURE=0.8
+PLOT_TOP_P=0.9
+
+# エピソード生成専用設定（オプション）
+EPISODE_MODEL=gemini-1.5-flash
+EPISODE_TEMPERATURE=1.0
+EPISODE_TOP_P=0.95
+```
+
+### プロバイダー別推奨モデル
+
+**OpenAI:**
+
+- `gpt-4o` (最高品質、高コスト)
+- `gpt-4o-mini` (推奨、コスト効率良)
+- `gpt-3.5-turbo` (低コスト)
+
+**Gemini:**
+
+- `gemini-1.5-flash` (推奨、高速)
+- `gemini-1.5-pro` (高品質)
+- `gemini-2.5-flash` (最新、高性能)
+
+**Anthropic:**
+
+- `claude-3-haiku-20240307` (高速、低コスト)
+- `claude-3-sonnet-20240229` (バランス)
+- `claude-3-opus-20240229` (最高品質)
+
+**Azure:**
+
+- お使いのデプロイメント名を指定
+
+### プロバイダー切り替え例
+
+**OpenAI を使用する場合:**
+
+```bash
+LLM_PROVIDER=openai
+LLM_MODEL=gpt-4o-mini
+OPENAI_API_KEY=your_actual_api_key
+```
+
+**Anthropic を使用する場合:**
+
+```bash
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-3-haiku-20240307
+ANTHROPIC_API_KEY=your_actual_api_key
+```
+
+### 設定の優先順位
+
+1. **専用設定**（`PLOT_*` または `EPISODE_*`）
+2. **デフォルト設定**（`LLM_*`）
+3. **内蔵デフォルト値**
+
+例：プロット生成では `PLOT_TEMPERATURE` → `LLM_TEMPERATURE` → `1.0` の順で設定値が決定されます。
+
+### 推奨設定
+
+- **プロット生成**: `TEMPERATURE=0.8` (より構造的で一貫性のある出力)
+- **エピソード生成**: `TEMPERATURE=1.0` (より創造的で表現豊かな出力)
+
+### パフォーマンスとコストの考慮
+
+- **高速・低コスト**: Gemini Flash、Claude Haiku、GPT-4o-mini
+- **高品質**: Gemini Pro、Claude Opus、GPT-4o
+- **バランス**: Claude Sonnet
 
 ## 使用方法
 
@@ -188,7 +284,12 @@ uv run main.py read --title <小説タイトル> [--port <ポート番号>] [--n
 
 ## 必要な環境変数
 
-- `GOOGLE_API_KEY`: Google Gemini API キー
+使用するプロバイダーに応じて、以下の API キーが必要です：
+
+- `OPENAI_API_KEY`: OpenAI の API キー
+- `GEMINI_API_KEY` または `GOOGLE_API_KEY`: Google Gemini の API キー
+- `ANTHROPIC_API_KEY`: Anthropic の API キー
+- `AZURE_API_KEY` と `AZURE_API_BASE`: Azure OpenAI の設定
 
 ## ライセンス
 
