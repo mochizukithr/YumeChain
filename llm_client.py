@@ -4,7 +4,7 @@ LLM クライアント
 import os
 import json
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import litellm
 from dotenv import load_dotenv
 from rich.console import Console
@@ -58,13 +58,18 @@ class LLMClient:
                   os.getenv('LLM_TOP_P') or '0.95')
         )
         
+        # コンテキストキャッシュの設定
+        self.enable_context_cache = os.getenv('ENABLE_CONTEXT_CACHE', 'false').lower() == 'true'
+        self.cached_contexts = {}  # キャッシュされたコンテキストを保存
+        
         # LiteLLMの設定
         self._setup_litellm()
         
         self.console = Console()
         
         # 設定情報をログ出力
-        self.console.print(f"[dim]プロバイダー: {self.provider}, モデル: {self.model_name}, Temperature: {self.temperature}, Top-p: {self.top_p}[/dim]")
+        cache_status = "有効" if self.enable_context_cache else "無効"
+        self.console.print(f"[dim]プロバイダー: {self.provider}, モデル: {self.model_name}, Temperature: {self.temperature}, Top-p: {self.top_p}, キャッシュ: {cache_status}[/dim]")
         
         # トークン使用量を追跡
         self.total_input_tokens = 0
@@ -135,7 +140,8 @@ class LLMClient:
         self.console.print(f"[dim]出力トークン: {self.total_output_tokens:,}[/dim]")
         self.console.print(f"[dim]合計トークン: {total_tokens:,}[/dim]")
     
-    def generate_text(self, prompt: str, progress_description: Optional[str] = None) -> str:
+    def generate_text(self, prompt: str, progress_description: Optional[str] = None, 
+                     cached_keys: List[str] = None) -> str:
         """テキスト生成"""
         try:
             if progress_description:
@@ -149,6 +155,9 @@ class LLMClient:
                     task = progress.add_task(progress_description, total=None)
                     start_time = time.time()
                     self.console.print(f"[dim]開始時刻: {time.strftime('%H:%M:%S')}[/dim]")
+                    
+                    # メッセージリストを構築（キャッシュ考慮）
+                    messages = self._build_messages_with_cache(prompt, cached_keys)
                     
                     # プロンプトのトークン数をカウント
                     prompt_token_count = self.count_tokens(prompt)
@@ -171,10 +180,17 @@ class LLMClient:
                                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
                             ]
                             self.console.print(f"[dim]Gemini安全フィルターを無効化[/dim]")
+                        
+                        # Geminiでキャッシュが有効な場合の処理
+                        if cached_keys and self.enable_context_cache and self._is_context_cache_supported():
+                            # TTL (Time To Live) を設定（オプション、デフォルトは1時間）
+                            cache_ttl = os.getenv('GEMINI_CACHE_TTL', '3600')  # 秒単位
+                            extra_params["ttl"] = int(cache_ttl)
+                            self.console.print(f"[dim]Geminiキャッシュ機能を使用 (TTL: {cache_ttl}秒)[/dim]")
                     
                     response = litellm.completion(
                         model=self.model_name,
-                        messages=[{"role": "user", "content": prompt}],
+                        messages=messages,
                         temperature=self.temperature,
                         top_p=self.top_p,
                         **extra_params
@@ -229,6 +245,9 @@ class LLMClient:
                     
                     return response_text
             else:
+                # メッセージリストを構築（キャッシュ考慮）
+                messages = self._build_messages_with_cache(prompt, cached_keys)
+                
                 # Geminiの安全設定を調整（コンテンツフィルター緩和）
                 extra_params = {}
                 if self.provider == 'gemini':
@@ -241,10 +260,17 @@ class LLMClient:
                             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
                         ]
                         self.console.print(f"[dim]Gemini安全フィルターを無効化[/dim]")
+                    
+                    # Geminiでキャッシュが有効な場合の処理
+                    if cached_keys and self.enable_context_cache and self._is_context_cache_supported():
+                        # TTL (Time To Live) を設定（オプション、デフォルトは1時間）
+                        cache_ttl = os.getenv('GEMINI_CACHE_TTL', '3600')  # 秒単位
+                        extra_params["ttl"] = int(cache_ttl)
+                        self.console.print(f"[dim]Geminiキャッシュ機能を使用 (TTL: {cache_ttl}秒)[/dim]")
                 
                 response = litellm.completion(
                     model=self.model_name,
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=messages,
                     temperature=self.temperature,
                     top_p=self.top_p,
                     **extra_params
@@ -297,20 +323,69 @@ class LLMClient:
         
         self.console.print("[bold blue]📖 プロット生成を開始します[/bold blue]")
         
-        if target_arc:
-            # 特定のアークのプロット生成
-            self.console.print(f"[dim]対象編: {target_arc}[/dim]")
-            template = ARC_SPECIFIC_PLOT_GENERATION_PROMPT
-            prompt = template.format(setting_content=setting_content, target_arc=target_arc)
-        else:
-            # 全体のプロット生成
-            template = PLOT_GENERATION_PROMPT
-            prompt = template.format(setting_content=setting_content)
+        # 設定ファイルをキャッシュ対象として登録
+        self.cache_setting_content(setting_content)
         
-        # プロンプトテンプレートのサイズを確認
-        template_size = len(template) - len("{setting_content}") - (len("{target_arc}") if target_arc else 0)
-        template_clean = template.replace('{setting_content}', '').replace('{target_arc}', '' if target_arc else '')
-        self.console.print(f"[dim]プロンプトテンプレート: {template_size}文字, {self.count_tokens(template_clean)}トークン[/dim]")
+        # キャッシュを考慮したプロンプト作成
+        if self.enable_context_cache and self._is_context_cache_supported():
+            if target_arc:
+                # 特定のアークのプロット生成（キャッシュ版）
+                self.console.print(f"[dim]対象編: {target_arc}[/dim]")
+                prompt = f"""指定された編のプロットを生成してください。
+
+対象編: {target_arc}
+
+以下の条件で物語のプロットを作成してください：
+- 指定された編に焦点を当てる
+- その編内の各エピソードの詳細なプロットを含める
+- JSON形式で出力する
+- 各エピソードは数値のキーで管理
+- 形式例：
+{{
+  "{target_arc}": {{
+    "1": "エピソード1のプロット詳細...",
+    "2": "エピソード2のプロット詳細..."
+  }}
+}}"""
+            else:
+                # 全体のプロット生成（キャッシュ版）
+                prompt = """全体の物語プロットを生成してください。
+
+以下の条件で物語のプロットを作成してください：
+- 複数の編に分けて構成
+- 各編に複数のエピソードを含める
+- 各エピソードの詳細なプロットを記載
+- JSON形式で出力する
+- 各エピソードは数値のキーで管理
+- 形式例：
+{
+  "第一編": {
+    "1": "エピソード1のプロット詳細...",
+    "2": "エピソード2のプロット詳細..."
+  },
+  "第二編": {
+    "1": "エピソード1のプロット詳細..."
+  }
+}"""
+            cached_keys = ["setting"]
+        else:
+            # 従来のプロンプト
+            if target_arc:
+                # 特定のアークのプロット生成
+                self.console.print(f"[dim]対象編: {target_arc}[/dim]")
+                template = ARC_SPECIFIC_PLOT_GENERATION_PROMPT
+                prompt = template.format(setting_content=setting_content, target_arc=target_arc)
+            else:
+                # 全体のプロット生成
+                template = PLOT_GENERATION_PROMPT
+                prompt = template.format(setting_content=setting_content)
+            cached_keys = None
+        
+        # プロンプトテンプレートのサイズを確認（従来版使用時のみ）
+        if not (self.enable_context_cache and self._is_context_cache_supported()):
+            template_size = len(template) - len("{setting_content}") - (len("{target_arc}") if target_arc else 0)
+            template_clean = template.replace('{setting_content}', '').replace('{target_arc}', '' if target_arc else '')
+            self.console.print(f"[dim]プロンプトテンプレート: {template_size}文字, {self.count_tokens(template_clean)}トークン[/dim]")
         
         # 設定ファイルのトークン数をログ出力
         self.log_token_info(setting_content, "設定ファイル")
@@ -318,7 +393,7 @@ class LLMClient:
         # プロンプト全体のサイズを確認
         self.console.print(f"[dim]プロンプトテンプレート適用後の全体サイズ確認[/dim]")
         
-        response = self.generate_text(prompt, "プロット生成中...")
+        response = self.generate_text(prompt, "プロット生成中...", cached_keys)
         
         # JSON部分を抽出
         try:
@@ -355,6 +430,9 @@ class LLMClient:
         
         self.console.print("[bold blue]📝 エピソード生成を開始します[/bold blue]")
         
+        # 設定ファイルをキャッシュ対象として登録
+        self.cache_setting_content(setting_content)
+        
         # プロンプトテンプレートのサイズを確認
         template_size = len(EPISODE_GENERATION_PROMPT) - len("{setting_content}") - len("{plot_content}")
         template_clean = EPISODE_GENERATION_PROMPT.replace('{setting_content}', '').replace('{plot_content}', '')
@@ -364,15 +442,34 @@ class LLMClient:
         self.log_token_info(setting_content, "設定ファイル")
         self.log_token_info(plot_content, "プロット")
         
-        prompt = EPISODE_GENERATION_PROMPT.format(
-            setting_content=setting_content,
-            plot_content=plot_content
-        )
+        # キャッシュを考慮したプロンプト作成
+        if self.enable_context_cache and self._is_context_cache_supported():
+            # キャッシュ使用時は設定ファイルを分離したプロンプト
+            prompt = f"""以下のプロットに基づいてエピソードを生成してください：
+
+{plot_content}
+
+生成要件:
+- 日本語で書く
+- 小説形式で書く
+- 会話は「」で囲む
+- 地の文で心情や状況を丁寧に描写する
+- エピソードとして自然な長さにする（3000-8000文字程度）
+- ストーリーの流れを自然にする
+- キャラクターの個性を活かす"""
+            cached_keys = ["setting"]
+        else:
+            # 従来のプロンプト
+            prompt = EPISODE_GENERATION_PROMPT.format(
+                setting_content=setting_content,
+                plot_content=plot_content
+            )
+            cached_keys = None
         
         # プロンプト全体のサイズを確認
         self.console.print(f"[dim]プロンプトテンプレート適用後の全体サイズ確認[/dim]")
         
-        episode_content = self.generate_text(prompt, "エピソード生成中...")
+        episode_content = self.generate_text(prompt, "エピソード生成中...", cached_keys)
         
         self.console.print(f"[green]✓ エピソード生成完了![/green]")
         
@@ -399,6 +496,9 @@ class LLMClient:
         
         self.console.print("[bold blue]📝 エピソード生成を開始します（前後情報付き）[/bold blue]")
         
+        # 設定ファイルをキャッシュ対象として登録
+        self.cache_setting_content(setting_content)
+        
         # 現在のエピソードのプロットを取得
         current_plot = plot_data.get(arc, {}).get(str(episode), "")
         if not current_plot:
@@ -408,27 +508,68 @@ class LLMClient:
         previous_plot = self._get_adjacent_episode_plot_by_file_order(plot_data, arc, episode, "previous")
         next_plot = self._get_adjacent_episode_plot_by_file_order(plot_data, arc, episode, "next")
         
-        # 前後の情報がある場合は詳細プロンプト、ない場合は通常プロンプトを使用
-        if previous_plot or next_plot:
-            template = EPISODE_GENERATION_WITH_CONTEXT_PROMPT
-            prompt = template.format(
-                setting_content=setting_content,
-                previous_plot=previous_plot,
-                current_plot=current_plot,
-                next_plot=next_plot
-            )
+        # キャッシュを考慮したプロンプト作成
+        if self.enable_context_cache and self._is_context_cache_supported():
+            # キャッシュ使用時は設定ファイルを分離したプロンプト
+            if previous_plot or next_plot:
+                prompt = f"""以下のプロット情報に基づいてエピソードを生成してください：
+
+前の話のプロット:
+{previous_plot if previous_plot else "（なし）"}
+
+現在の話のプロット:
+{current_plot}
+
+次の話のプロット:
+{next_plot if next_plot else "（なし）"}
+
+生成要件:
+- 日本語で書く
+- 小説形式で書く
+- 会話は「」で囲む
+- 地の文で心情や状況を丁寧に描写する
+- エピソードとして自然な長さにする（3000-8000文字程度）
+- 前後のエピソードとの連続性を意識する
+- ストーリーの流れを自然にする
+- キャラクターの個性を活かす"""
+            else:
+                prompt = f"""以下のプロットに基づいてエピソードを生成してください：
+
+{current_plot}
+
+生成要件:
+- 日本語で書く
+- 小説形式で書く
+- 会話は「」で囲む
+- 地の文で心情や状況を丁寧に描写する
+- エピソードとして自然な長さにする（3000-8000文字程度）
+- ストーリーの流れを自然にする
+- キャラクターの個性を活かす"""
+            cached_keys = ["setting"]
         else:
-            # 前後の情報がない場合は従来のプロンプトを使用
-            template = EPISODE_GENERATION_PROMPT
-            prompt = template.format(
-                setting_content=setting_content,
-                plot_content=current_plot
-            )
+            # 従来のプロンプト
+            if previous_plot or next_plot:
+                template = EPISODE_GENERATION_WITH_CONTEXT_PROMPT
+                prompt = template.format(
+                    setting_content=setting_content,
+                    previous_plot=previous_plot,
+                    current_plot=current_plot,
+                    next_plot=next_plot
+                )
+            else:
+                # 前後の情報がない場合は従来のプロンプトを使用
+                template = EPISODE_GENERATION_PROMPT
+                prompt = template.format(
+                    setting_content=setting_content,
+                    plot_content=current_plot
+                )
+            cached_keys = None
         
         # プロンプトテンプレートのサイズを確認
-        template_placeholders = len("{setting_content}") + len("{previous_plot}") + len("{current_plot}") + len("{next_plot}")
-        template_size = len(template) - template_placeholders
-        self.console.print(f"[dim]プロンプトテンプレート: {template_size}文字[/dim]")
+        if not (self.enable_context_cache and self._is_context_cache_supported()):
+            template_placeholders = len("{setting_content}") + len("{previous_plot}") + len("{current_plot}") + len("{next_plot}")
+            template_size = len(template if 'template' in locals() else EPISODE_GENERATION_PROMPT) - template_placeholders
+            self.console.print(f"[dim]プロンプトテンプレート: {template_size}文字[/dim]")
         
         # 各コンテンツのトークン数をログ出力
         self.log_token_info(setting_content, "設定ファイル")
@@ -441,7 +582,7 @@ class LLMClient:
         # プロンプト全体のサイズを確認
         self.console.print(f"[dim]プロンプトテンプレート適用後の全体サイズ確認[/dim]")
         
-        episode_content = self.generate_text(prompt, "エピソード生成中...")
+        episode_content = self.generate_text(prompt, "エピソード生成中...", cached_keys)
         
         self.console.print(f"[green]✓ エピソード生成完了![/green]")
         
@@ -450,88 +591,110 @@ class LLMClient:
         
         return episode_content
     
-    def _get_adjacent_episode_plot(self, plot_data: Dict[str, Any], arc: str, episode: int, 
-                                   label: str) -> str:
-        """
-        隣接するエピソードのプロットを取得
+    def _is_context_cache_supported(self) -> bool:
+        """現在のプロバイダーがコンテキストキャッシュをサポートしているかチェック"""
+        # Claude 3.5 Sonnet、Claude 3 Haiku、Claude 3.5 Haiku、Claude 3 Opus がサポート
+        anthropic_cache_models = [
+            'claude-3-5-sonnet-20241022',
+            'claude-3-5-sonnet-20240620', 
+            'claude-3-5-haiku-20241022',
+            'claude-3-haiku-20240307',
+            'claude-3-opus-20240229'
+        ]
         
-        Args:
-            plot_data: プロット全体のデータ
-            arc: 編名
-            episode: エピソード番号
-            label: ログ用のラベル（"前の話"、"次の話"など）
+        # OpenAI GPT-4o、GPT-4o-mini もサポート
+        openai_cache_models = [
+            'gpt-4o',
+            'gpt-4o-mini',
+            'gpt-4o-2024-11-20',
+            'gpt-4o-2024-08-06',
+            'gpt-4o-mini-2024-07-18'
+        ]
         
-        Returns:
-            エピソードのプロット（存在しない場合は空文字列）
-        """
-        if episode <= 0:
-            return ""
+        # Google Gemini 1.5 Pro/Flash、2.0 Flash、2.5 Flash がサポート
+        gemini_cache_models = [
+            'gemini-1.5-pro',
+            'gemini-1.5-flash',
+            'gemini-2.0-flash',
+            'gemini-2.5-flash',
+            'gemini/gemini-1.5-pro',
+            'gemini/gemini-1.5-flash',
+            'gemini/gemini-2.0-flash',
+            'gemini/gemini-2.5-flash'
+        ]
         
-        arc_data = plot_data.get(arc, {})
-        episode_plot = arc_data.get(str(episode), "")
-        
-        if episode_plot:
-            self.console.print(f"[dim]{label}の情報を取得: Episode {episode}[/dim]")
+        if self.provider == 'anthropic':
+            return any(model in self.model_name for model in anthropic_cache_models)
+        elif self.provider == 'openai':
+            return any(model in self.model_name for model in openai_cache_models)
+        elif self.provider == 'gemini':
+            return any(model in self.model_name for model in gemini_cache_models)
         else:
-            self.console.print(f"[dim]{label}の情報: なし[/dim]")
+            return False
+    
+    def _create_cached_message(self, content: str, cache_type: str = "ephemeral") -> Dict[str, Any]:
+        """キャッシュ対象のメッセージを作成"""
+        if not self._is_context_cache_supported():
+            return {"role": "user", "content": content}
         
-        return episode_plot
-
-    def _get_adjacent_episode_plot_by_file_order(self, plot_data: Dict[str, Any], 
-                                                 current_arc: str, current_episode: int, 
-                                                 direction: str) -> str:
-        """
-        ファイル構造に基づいて隣接するエピソードのプロットを取得
-        chapter概念を考慮して編をまたいだ前後判定を行う
-        
-        Args:
-            plot_data: プロット全体のデータ
-            current_arc: 現在の編名
-            current_episode: 現在のエピソード番号
-            direction: "previous" または "next"
-        
-        Returns:
-            隣接するエピソードのプロット（存在しない場合は空文字列）
-        """
-        # 全エピソードを（arc, episode）のタプルリストで取得
-        all_episodes = []
-        for arc_name, episodes in plot_data.items():
-            for ep_num_str, plot in episodes.items():
-                try:
-                    ep_num = int(ep_num_str)
-                    all_episodes.append((arc_name, ep_num, plot))
-                except ValueError:
-                    continue
-        
-        # ファイル名順でソート（arc名でソート、その後episode番号でソート）
-        all_episodes.sort(key=lambda x: (x[0], x[1]))
-        
-        # 現在のエピソードのインデックスを検索
-        current_index = None
-        for i, (arc_name, ep_num, plot) in enumerate(all_episodes):
-            if arc_name == current_arc and ep_num == current_episode:
-                current_index = i
-                break
-        
-        if current_index is None:
-            self.console.print(f"[dim]現在のエピソード {current_arc}_{current_episode} が見つかりません[/dim]")
-            return ""
-        
-        # 前後のエピソードを取得
-        if direction == "previous":
-            target_index = current_index - 1
-            label = "前の話"
-        elif direction == "next":
-            target_index = current_index + 1
-            label = "次の話"
+        if self.provider == 'anthropic':
+            # Anthropic Claude のキャッシュ形式
+            return {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": content,
+                        "cache_control": {"type": cache_type}
+                    }
+                ]
+            }
+        elif self.provider == 'openai':
+            # OpenAI のキャッシュ形式（将来のサポートに備えて）
+            return {
+                "role": "user", 
+                "content": content
+                # OpenAIのキャッシュパラメータは将来追加される可能性があります
+            }
+        elif self.provider == 'gemini':
+            # Google Gemini のキャッシュ形式
+            # Geminiではcached_contentとしてキャッシュコンテンツを事前登録し、
+            # その後cached_content_token_countを使用する方式
+            return {
+                "role": "user", 
+                "content": content,
+                "_cache_hint": True  # LiteLLM経由での実装時の参考用
+            }
         else:
-            return ""
+            return {"role": "user", "content": content}
+    
+    def cache_setting_content(self, setting_content: str, cache_key: str = "setting") -> None:
+        """設定ファイルの内容をキャッシュ対象として登録"""
+        if not self.enable_context_cache:
+            return
         
-        # インデックスが範囲内かチェック
-        if 0 <= target_index < len(all_episodes):
-            target_arc, target_episode, target_plot = all_episodes[target_index]
-            self.console.print(f"[dim]{label}の情報を取得: {target_arc}_{target_episode}[/dim]")
-            return target_plot
-        else:
-            self.console.print(f"[dim]{label}の情報: なし[/dim]")
-            return ""
+        if not self._is_context_cache_supported():
+            self.console.print(f"[yellow]⚠️ {self.provider}/{self.model_name} はコンテキストキャッシュをサポートしていません[/yellow]")
+            return
+        
+        self.cached_contexts[cache_key] = setting_content
+        token_count = self.count_tokens(setting_content)
+        self.console.print(f"[green]✓ 設定ファイルをキャッシュ対象として登録 ({token_count}トークン)[/green]")
+    
+    def _build_messages_with_cache(self, prompt: str, cached_keys: List[str] = None) -> List[Dict[str, Any]]:
+        """キャッシュされたコンテキストを含むメッセージリストを構築"""
+        messages = []
+        
+        # キャッシュされたコンテキストを追加
+        if cached_keys and self.enable_context_cache and self._is_context_cache_supported():
+            for key in cached_keys:
+                if key in self.cached_contexts:
+                    cached_content = self.cached_contexts[key]
+                    cached_message = self._create_cached_message(cached_content)
+                    messages.append(cached_message)
+                    self.console.print(f"[dim]キャッシュされたコンテキスト '{key}' を使用[/dim]")
+        
+        # メインプロンプトを追加
+        messages.append({"role": "user", "content": prompt})
+        
+        return messages

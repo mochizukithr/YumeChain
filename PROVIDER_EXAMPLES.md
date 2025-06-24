@@ -54,6 +54,78 @@ EPISODE_MODEL=gpt-4o
 EPISODE_TEMPERATURE=1.2
 ```
 
+## コンテキストキャッシュ機能
+
+長いプロンプトの一部（特に設定ファイル）をキャッシュして、API 呼び出しコストを削減できます。
+
+### 対応プロバイダー・モデル
+
+#### Anthropic Claude (推奨)
+
+```bash
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-3-5-sonnet-20241022  # またはhaiku、opus
+ANTHROPIC_API_KEY=your_actual_anthropic_api_key
+ENABLE_CONTEXT_CACHE=true
+```
+
+対応モデル:
+
+- `claude-3-5-sonnet-20241022`
+- `claude-3-5-sonnet-20240620`
+- `claude-3-5-haiku-20241022`
+- `claude-3-haiku-20240307`
+- `claude-3-opus-20240229`
+
+#### OpenAI GPT-4o
+
+```bash
+LLM_PROVIDER=openai
+LLM_MODEL=gpt-4o-mini  # またはgpt-4o
+OPENAI_API_KEY=your_actual_openai_api_key
+ENABLE_CONTEXT_CACHE=true
+```
+
+対応モデル:
+
+- `gpt-4o`
+- `gpt-4o-mini`
+- `gpt-4o-2024-11-20`
+- `gpt-4o-2024-08-06`
+- `gpt-4o-mini-2024-07-18`
+
+#### Google Gemini (推奨)
+
+```bash
+LLM_PROVIDER=gemini
+LLM_MODEL=gemini/gemini-2.5-flash  # または1.5-pro、2.0-flash等
+GEMINI_API_KEY=your_actual_gemini_api_key
+ENABLE_CONTEXT_CACHE=true
+# オプション: キャッシュの有効期限（秒単位、デフォルト: 3600）
+GEMINI_CACHE_TTL=7200
+```
+
+対応モデル:
+
+- `gemini/gemini-1.5-pro`
+- `gemini/gemini-1.5-flash`
+- `gemini/gemini-2.0-flash`
+- `gemini/gemini-2.5-flash`
+
+### 使用効果
+
+コンテキストキャッシュを有効にすると:
+
+1. **設定ファイルがキャッシュされる** - 毎回の API 呼び出しで設定ファイル全体を送信する必要がなくなります
+2. **API コストが削減される** - キャッシュされた部分は低コストで処理されます
+3. **レスポンス時間が短縮される** - キャッシュされたコンテンツの処理が高速化されます
+
+### 注意事項（コンテキストキャッシュ）
+
+- キャッシュは一定時間後に自動削除されます（プロバイダーにより異なる）
+- 設定ファイルが変更された場合、新しいセッションでキャッシュが更新されます
+- 対応していないモデルでは自動的に通常のプロンプトにフォールバックします
+
 ## 注意事項
 
 - 使用するプロバイダーに対応する API キーが必要です

@@ -116,6 +116,46 @@ LLM_MODEL=claude-3-haiku-20240307
 ANTHROPIC_API_KEY=your_actual_api_key
 ```
 
+### コンテキストキャッシュ機能
+
+長い設定ファイルを効率的に処理するために、コンテキストキャッシュ機能を利用できます。
+
+#### 対応プロバイダー・モデル
+
+**Anthropic Claude (推奨):**
+
+- `claude-3-5-sonnet-20241022`、`claude-3-5-haiku-20241022`
+- `claude-3-haiku-20240307`、`claude-3-opus-20240229`
+
+**OpenAI:**
+
+- `gpt-4o`、`gpt-4o-mini`とその各バージョン
+
+#### 設定方法
+
+```bash
+# コンテキストキャッシュを有効化
+ENABLE_CONTEXT_CACHE=true
+
+# 対応モデルを使用
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-3-5-sonnet-20241022
+ANTHROPIC_API_KEY=your_actual_api_key
+```
+
+#### 効果
+
+- **コスト削減**: 設定ファイルがキャッシュされ、毎回の送信が不要
+- **処理高速化**: キャッシュ部分の処理が高速化
+- **自動フォールバック**: 非対応モデルでは従来方式で動作
+
+#### テスト
+
+```bash
+# コンテキストキャッシュ機能をテスト
+uv run script/test_context_cache.py
+```
+
 ### 設定の優先順位
 
 1. **専用設定**（`PLOT_*` または `EPISODE_*`）
@@ -134,6 +174,7 @@ ANTHROPIC_API_KEY=your_actual_api_key
 - **高速・低コスト**: Gemini Flash、Claude Haiku、GPT-4o-mini
 - **高品質**: Gemini Pro、Claude Opus、GPT-4o
 - **バランス**: Claude Sonnet
+- **コスト効率**: キャッシュ対応モデル（Claude、GPT-4o）+ `ENABLE_CONTEXT_CACHE=true`
 
 ## 使用方法
 
