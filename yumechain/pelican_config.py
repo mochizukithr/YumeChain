@@ -32,7 +32,8 @@ DEFAULT_PAGINATION = 10
 RELATIVE_URLS = True
 
 # テーマ設定
-THEME = 'theme'  # カスタムテーマを使用
+from . import get_theme_path
+THEME = str(get_theme_path())  # パッケージ内のカスタムテーマを使用
 
 # HTML出力の設定
 DISPLAY_PAGES_ON_MENU = True

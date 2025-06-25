@@ -164,6 +164,74 @@ chapter: "{episode}"
         episode_file.write_text(full_content, encoding='utf-8')
         print(f"Episode saved to: {episode_file}")
     
+    def read_episode(self, title: str, arc: str, episode: int) -> str:
+        """エピソードファイルの内容を読み込み"""
+        stories_dir = self.get_novel_dir(title) / "stories"
+        episode_file = stories_dir / f"{arc}_{episode:02d}.md"
+        
+        if not episode_file.exists():
+            return ""
+        
+        content = episode_file.read_text(encoding='utf-8')
+        
+        # YAMLフロントマターを除去して本文のみを返す
+        if content.startswith('---'):
+            # YAMLフロントマターの終了位置を見つける
+            lines = content.split('\n')
+            end_marker = -1
+            for i, line in enumerate(lines[1:], 1):
+                if line.strip() == '---':
+                    end_marker = i
+                    break
+            
+            if end_marker > 0:
+                # フロントマター以降の内容を返す
+                return '\n'.join(lines[end_marker + 1:]).strip()
+        
+        return content.strip()
+    
+    def get_previous_episode_content(self, title: str, arc: str, episode: int, plot_data: Dict[str, Any] = None) -> str:
+        """前のエピソードの内容を取得（ファイル順序ベース）"""
+        if plot_data is None:
+            try:
+                plot_data = self.read_plot(title)
+            except FileNotFoundError:
+                return ""
+        
+        # 全エピソードを（arc, episode）のタプルリストで取得
+        all_episodes = []
+        for arc_name, episodes in plot_data.items():
+            for ep_num_str, plot in episodes.items():
+                try:
+                    ep_num = int(ep_num_str)
+                    all_episodes.append((arc_name, ep_num))
+                except ValueError:
+                    continue
+        
+        # ファイル名順でソート（arc名でソート、その後episode番号でソート）
+        all_episodes.sort(key=lambda x: (x[0], x[1]))
+        
+        # 現在のエピソードのインデックスを検索
+        current_index = None
+        for i, (arc_name, ep_num) in enumerate(all_episodes):
+            if arc_name == arc and ep_num == episode:
+                current_index = i
+                break
+        
+        if current_index is None or current_index == 0:
+            return ""  # 最初のエピソードまたは見つからない場合
+        
+        # 前のエピソードを取得
+        prev_arc, prev_episode = all_episodes[current_index - 1]
+        prev_content = self.read_episode(title, prev_arc, prev_episode)
+        
+        if prev_content:
+            self.console.print(f"[dim]前のエピソード内容を取得: {prev_arc}_{prev_episode}[/dim]")
+        else:
+            self.console.print(f"[dim]前のエピソード内容: なし[/dim]")
+        
+        return prev_content
+
     def episode_exists(self, title: str, arc: str, episode: int) -> bool:
         """エピソードファイルが存在するかチェック"""
         stories_dir = self.get_novel_dir(title) / "stories"

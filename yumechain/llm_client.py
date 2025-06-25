@@ -127,10 +127,10 @@ class LLMClient:
         token_count = self.count_tokens(text)
         self.console.print(f"[dim]{label}: {char_count}文字, {token_count}トークン[/dim]")
     
-    def update_token_usage(self, input_tokens: int, output_tokens: int):
+    def update_token_usage(self, input_tokens: int, outputTokens: int):
         """トークン使用量を更新"""
         self.total_input_tokens += input_tokens
-        self.total_output_tokens += output_tokens
+        self.total_output_tokens += outputTokens
     
     def show_token_summary(self):
         """トークン使用量のサマリーを表示"""
@@ -478,12 +478,13 @@ class LLMClient:
         
         return episode_content
     
-    def generate_episode_with_context(self, setting_content: str, arc: str, episode: int, 
+    def generate_episode_with_context(self, book_title: str, setting_content: str, arc: str, episode: int, 
                                       plot_data: Dict[str, Any]) -> str:
         """
-        前後のエピソード情報を含めてエピソード生成
+        プロット全体を含めてエピソード生成
         
         Args:
+            book_title: 書籍タイトル
             setting_content: 設定ファイルの内容
             arc: 編名
             episode: エピソード番号
@@ -492,36 +493,53 @@ class LLMClient:
         Returns:
             生成されたエピソード本文
         """
-        from prompt_templates import EPISODE_GENERATION_WITH_CONTEXT_PROMPT, EPISODE_GENERATION_PROMPT
+        from prompt_templates import EPISODE_GENERATION_WITH_FULL_PLOT_PROMPT, EPISODE_GENERATION_WITH_FULL_PLOT_NO_PREVIOUS_PROMPT
+        from file_manager import FileManager
+        import json
         
-        self.console.print("[bold blue]📝 エピソード生成を開始します（前後情報付き）[/bold blue]")
+        self.console.print("[bold blue]📝 エピソード生成を開始します（プロット全体使用）[/bold blue]")
         
         # 設定ファイルをキャッシュ対象として登録
         self.cache_setting_content(setting_content)
         
-        # 現在のエピソードのプロットを取得
+        # 現在のエピソードのプロットを取得（検証用）
         current_plot = plot_data.get(arc, {}).get(str(episode), "")
         if not current_plot:
             raise ValueError(f"Episode {episode} not found in arc '{arc}'")
         
-        # 前後のエピソードプロットを取得（ファイル構造ベース）
-        previous_plot = self._get_adjacent_episode_plot_by_file_order(plot_data, arc, episode, "previous")
-        next_plot = self._get_adjacent_episode_plot_by_file_order(plot_data, arc, episode, "next")
+        # プロット全体をJSON形式でフォーマット
+        full_plot_json = json.dumps(plot_data, ensure_ascii=False, indent=2)
+        
+        # FileManagerインスタンスを作成して前のエピソード内容を取得
+        fm = FileManager()
+        previous_episode_content = None
+        try:
+            previous_episode_content = fm.get_previous_episode_content(book_title, arc, episode, plot_data)
+        except Exception as e:
+            self.console.print(f"[yellow]⚠️ 前のエピソード内容の取得でエラー: {str(e)}[/yellow]")
+            previous_episode_content = None
+        
+        # 前のエピソード内容の取得結果をログ出力
+        if previous_episode_content:
+            self.console.print(f"[dim]前のエピソード内容を取得しました ({len(previous_episode_content)}文字)[/dim]")
+        else:
+            self.console.print(f"[dim]前のエピソード内容はありません（最初のエピソードまたはファイル未生成）[/dim]")
         
         # キャッシュを考慮したプロンプト作成
         if self.enable_context_cache and self._is_context_cache_supported():
             # キャッシュ使用時は設定ファイルを分離したプロンプト
-            if previous_plot or next_plot:
-                prompt = f"""以下のプロット情報に基づいてエピソードを生成してください：
+            if previous_episode_content:
+                # 前のエピソード内容がある場合
+                prompt = f"""以下の情報に基づいてエピソードを生成してください：
 
-前の話のプロット:
-{previous_plot if previous_plot else "（なし）"}
+前のエピソードの内容:
+{previous_episode_content}
 
-現在の話のプロット:
-{current_plot}
+プロット全体:
+{full_plot_json}
 
-次の話のプロット:
-{next_plot if next_plot else "（なし）"}
+現在の編: {arc}
+現在の話数: {episode}
 
 生成要件:
 - 日本語で書く
@@ -529,13 +547,22 @@ class LLMClient:
 - 会話は「」で囲む
 - 地の文で心情や状況を丁寧に描写する
 - エピソードとして自然な長さにする（3000-8000文字程度）
-- 前後のエピソードとの連続性を意識する
-- ストーリーの流れを自然にする
+- 前のエピソードから自然に続くストーリーにする
+- 前のエピソードの最後の状況を考慮して始める
+- プロット全体を俯瞰して、現在のエピソードの物語上の位置づけを意識する
+- ストーリー全体の流れの中での適切な伏線やキャラクター描写を含める
+- 物語全体のテーマや方向性を考慮して執筆する
+- 他のエピソードとの一貫性を保つ
 - キャラクターの個性を活かす"""
             else:
-                prompt = f"""以下のプロットに基づいてエピソードを生成してください：
+                # 前のエピソード内容がない場合
+                prompt = f"""以下のプロット全体に基づいてエピソードを生成してください：
 
-{current_plot}
+プロット全体:
+{full_plot_json}
+
+現在の編: {arc}
+現在の話数: {episode}
 
 生成要件:
 - 日本語で書く
@@ -543,41 +570,42 @@ class LLMClient:
 - 会話は「」で囲む
 - 地の文で心情や状況を丁寧に描写する
 - エピソードとして自然な長さにする（3000-8000文字程度）
-- ストーリーの流れを自然にする
+- プロット全体を俯瞰して、現在のエピソードの物語上の位置づけを意識する
+- ストーリー全体の流れの中での適切な伏線やキャラクター描写を含める
+- 物語全体のテーマや方向性を考慮して執筆する
+- 他のエピソードとの一貫性を保つ
 - キャラクターの個性を活かす"""
             cached_keys = ["setting"]
         else:
-            # 従来のプロンプト
-            if previous_plot or next_plot:
-                template = EPISODE_GENERATION_WITH_CONTEXT_PROMPT
+            # 従来のプロンプト（非キャッシュ）
+            if previous_episode_content:
+                # 前のエピソード内容がある場合は新しいテンプレートを使用
+                template = EPISODE_GENERATION_WITH_FULL_PLOT_PROMPT
                 prompt = template.format(
                     setting_content=setting_content,
-                    previous_plot=previous_plot,
-                    current_plot=current_plot,
-                    next_plot=next_plot
+                    previous_content=previous_episode_content,
+                    full_plot_data=full_plot_json
                 )
             else:
-                # 前後の情報がない場合は従来のプロンプトを使用
-                template = EPISODE_GENERATION_PROMPT
+                # 前のエピソード内容がない場合
+                template = EPISODE_GENERATION_WITH_FULL_PLOT_NO_PREVIOUS_PROMPT
                 prompt = template.format(
                     setting_content=setting_content,
-                    plot_content=current_plot
+                    full_plot_data=full_plot_json
                 )
             cached_keys = None
         
         # プロンプトテンプレートのサイズを確認
         if not (self.enable_context_cache and self._is_context_cache_supported()):
-            template_placeholders = len("{setting_content}") + len("{previous_plot}") + len("{current_plot}") + len("{next_plot}")
-            template_size = len(template if 'template' in locals() else EPISODE_GENERATION_PROMPT) - template_placeholders
+            template_placeholders = len("{setting_content}") + len("{full_plot_data}") + len("{previous_content}")
+            template_size = len(template if 'template' in locals() else EPISODE_GENERATION_WITH_FULL_PLOT_NO_PREVIOUS_PROMPT) - template_placeholders
             self.console.print(f"[dim]プロンプトテンプレート: {template_size}文字[/dim]")
         
         # 各コンテンツのトークン数をログ出力
         self.log_token_info(setting_content, "設定ファイル")
-        self.log_token_info(current_plot, "現在の話のプロット")
-        if previous_plot:
-            self.log_token_info(previous_plot, "前の話のプロット")
-        if next_plot:
-            self.log_token_info(next_plot, "次の話のプロット")
+        self.log_token_info(full_plot_json, "プロット全体")
+        if previous_episode_content:
+            self.log_token_info(previous_episode_content, "前のエピソード内容")
         
         # プロンプト全体のサイズを確認
         self.console.print(f"[dim]プロンプトテンプレート適用後の全体サイズ確認[/dim]")
@@ -698,3 +726,63 @@ class LLMClient:
         messages.append({"role": "user", "content": prompt})
         
         return messages
+    
+    def _get_adjacent_episode_plot_by_file_order(self, plot_data: Dict[str, Any], arc: str, episode: int, direction: str) -> str:
+        """
+        前後のエピソードプロットを取得（ファイル順序ベース）
+        
+        Args:
+            plot_data: プロット全体のデータ
+            arc: 編名
+            episode: 現在のエピソード番号
+            direction: "previous" または "next"
+        
+        Returns:
+            前後のエピソードプロット（見つからない場合は空文字）
+        """
+        if arc not in plot_data:
+            return ""
+        
+        arc_data = plot_data[arc]
+        
+        if direction == "previous":
+            target_episode = episode - 1
+        elif direction == "next":
+            target_episode = episode + 1
+        else:
+            return ""
+        
+        return arc_data.get(str(target_episode), "")
+    
+    def _format_full_plot_data(self, plot_data: Dict[str, Any], current_arc: str, current_episode: int) -> str:
+        """
+        プロット全体を整形してテキスト形式で返す
+        
+        Args:
+            plot_data: プロット全体のデータ
+            current_arc: 現在の編名
+            current_episode: 現在のエピソード番号
+        
+        Returns:
+            整形されたプロット全体のテキスト
+        """
+        formatted_plots = []
+        
+        for arc_name, episodes in plot_data.items():
+            formatted_plots.append(f"■ {arc_name}")
+            
+            # エピソード番号順にソート
+            sorted_episodes = sorted(episodes.items(), key=lambda x: int(x[0]))
+            
+            for episode_num, plot_content in sorted_episodes:
+                # 現在のエピソードをマークアップ
+                if arc_name == current_arc and int(episode_num) == current_episode:
+                    marker = "【現在のエピソード】"
+                else:
+                    marker = ""
+                
+                formatted_plots.append(f"  第{episode_num}話{marker}: {plot_content}")
+            
+            formatted_plots.append("")  # 編間の空行
+        
+        return "\n".join(formatted_plots)

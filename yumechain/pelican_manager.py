@@ -138,15 +138,17 @@ slug: {slug}
             else:
                 self.console.print("[yellow]警告: pelican_config.py が見つかりません[/yellow]")
             
-            # カスタムテーマをコピー
-            theme_source = self.base_dir / "theme"
+            # カスタムテーマをコピー（パッケージ内から）
+            from . import get_theme_path
+            theme_source = get_theme_path()
             if theme_source.exists():
                 theme_dest = self.temp_dir / "theme"
                 shutil.copytree(theme_source, theme_dest)
                 self.console.print("[dim]カスタムテーマをコピーしました[/dim]")
             
-            # 静的ファイルをコピー
-            static_source = self.base_dir / "static"
+            # 静的ファイルをコピー（パッケージ内から）
+            from . import get_static_path
+            static_source = get_static_path()
             if static_source.exists():
                 static_dest = content_dir / "static"
                 shutil.copytree(static_source, static_dest)

@@ -1,5 +1,5 @@
 [project]
-name = "llm-x-reader"
+name = "YumeChain"
 version = "0.1.0"
 description = "Novel generation app using LLM (Gemini)"
 readme = "README.md"
@@ -13,3 +13,21 @@ dependencies = [
     "markdown>=3.4.0",
     "litellm>=1.0.0",
 ]
+
+[project.scripts]
+yumechain = "yumechain.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["yumechain"]
+include = [
+    "yumechain/**/*.py",
+    "yumechain/static/**/*",
+    "yumechain/theme/**/*",
+]
+
+[tool.hatch.build.targets.wheel.sources]
+"yumechain" = "yumechain"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
