@@ -8,7 +8,7 @@ LLM（OpenAI、Gemini、Anthropic など）を使って設定から小説を自�
 - プロットから各話の本文生成
 - 複数の LLM プロバイダー対応（OpenAI、Gemini、Anthropic、Azure）
 - インタラクティブな CLI インターフェース
-- Web ブラウザでの美しい小説表示
+- Flask による Web 表示機能（ポート指定対応）
 - ドライランモード対応
 - コンテキストキャッシュ機能
 
@@ -272,15 +272,44 @@ yumechain read --title "昭和転生"
 
 **オプション:**
 
-- `--port <ポート番号>`: サーバーポートを指定（デフォルト: 8000）
+- `--port <ポート番号>`: サーバーポートを指定（デフォルト: 5000）
+- `--auto-port`: 利用可能なポートを自動で検索
 - `--no-browser`: ブラウザの自動起動を無効化
 
-例:
+**使用例:**
 
 ```bash
-# ポート8080でサーバー起動、ブラウザ自動起動なし
-yumechain read --title "昭和転生" --port 8080 --no-browser
+# デフォルトポート（5000）で起動
+yumechain read --title "昭和転生"
+
+# カスタムポート指定
+yumechain read --title "昭和転生" --port 8080
+
+# 利用可能なポートを自動検索
+yumechain read --title "昭和転生" --auto-port
+
+# ポート指定 + ブラウザ自動起動無効化
+yumechain read --title "昭和転生" --port 3000 --no-browser
 ```
+
+## Web 表示機能
+
+YumeChain では Flask を使用した軽量な Web 表示機能を提供します。
+
+### Flask Web サーバー
+
+- **特徴**: 軽量 Web フレームワーク
+- **メリット**: 高速起動、シンプルな構成、小説読書に最適化された UI
+- **用途**: 小説の閲覧、リアルタイム表示
+- **ポート**: 5000（デフォルト、変更可能）
+
+### ポート指定機能
+
+複数のサーバーを同時に起動したり、ポートの競合を回避するために、柔軟なポート指定機能を提供：
+
+- **固定ポート指定**: `--port` オプションで任意のポート番号を指定
+- **自動ポート検索**: `--auto-port` オプションで利用可能なポートを自動検索
+- **インタラクティブ設定**: メニューからの起動時も対話的にポート設定可能
 
 ## ディレクトリ構成
 
@@ -299,13 +328,12 @@ yumechain/               # YumeChainパッケージ
 ├─ cli.py               # コマンドラインインターフェース
 ├─ llm_client.py        # LLMクライアント
 ├─ file_manager.py      # ファイル管理
-├─ pelican_manager.py   # Web表示用サーバー管理
+├─ flask_manager.py     # Flask Webサーバー管理
 ├─ prompt_templates.py  # プロンプトテンプレート
-├─ pelican_config.py    # Pelican設定
 ├─ static/              # 静的ファイル
 │  └─ css/
 │     └─ novel.css      # 小説表示用CSS
-└─ theme/               # Pelicanテーマ
+└─ theme/               # 表示テーマ
    └─ templates/
       ├─ base.html
       ├─ index.html
@@ -369,15 +397,38 @@ yumechain status --title <小説タイトル>
 生成した小説を Web ブラウザで読みやすく表示します。
 
 ```bash
-yumechain read --title <小説タイトル> [--port <ポート番号>] [--no-browser]
+yumechain read --title <小説タイトル> [--port <ポート番号>] [--auto-port] [--no-browser]
 ```
+
+**オプション:**
+
+- `--port <ポート番号>`: サーバーポートを指定（デフォルト: 5000）
+- `--auto-port`: 利用可能なポートを自動で検索
+- `--no-browser`: ブラウザの自動起動を無効化
 
 **特徴:**
 
-- Pelican を使用した美しい Web レイアウト
+- Flask による軽量 Web サーバー
 - 小説読書に特化したカスタム CSS
 - レスポンシブデザイン対応
 - 記事間のナビゲーション機能
+- ポートの競合回避機能
+
+**使用例:**
+
+```bash
+# デフォルトポートで起動
+yumechain read --title "昭和転生"
+
+# カスタムポート指定
+yumechain read --title "昭和転生" --port 8080
+
+# 自動ポート検索
+yumechain read --title "昭和転生" --auto-port
+
+# ブラウザ自動起動無効化
+yumechain read --title "昭和転生" --no-browser
+```
 
 ## オプション
 
@@ -393,7 +444,7 @@ YumeChain は以下のコンポーネントで構成されています：
 - **CLI**: `yumechain.cli` - コマンドラインインターフェース
 - **LLM クライアント**: `yumechain.llm_client` - 複数 LLM プロバイダー対応
 - **ファイル管理**: `yumechain.file_manager` - プロジェクトファイル操作
-- **Web 表示**: `yumechain.pelican_manager` - 小説の Web 表示機能
+- **Web 表示**: `yumechain.flask_manager` - 小説の Web 表示機能
 - **プロンプトテンプレート**: `yumechain.prompt_templates` - LLM 用プロンプト定義
 - **テーマとスタイル**: `yumechain/theme/`, `yumechain/static/` - Web 表示用カスタマイズ
 

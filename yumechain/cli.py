@@ -9,12 +9,12 @@ import sys
 import termios
 import tty
 from pathlib import Path
+from typing import Optional
 from rich.console import Console
 from rich.prompt import Prompt, Confirm, IntPrompt
 from rich.table import Table
 from .llm_client import LLMClient
 from .file_manager import FileManager
-from .pelican_manager import PelicanServerManager
 import json
 
 def getch():
@@ -444,22 +444,65 @@ def handle_read_command():
     title = select_novel_title()
     if not title:
         return
-    
+
     console = Console()
+    
+    # ポート番号を入力
+    port = IntPrompt.ask(
+        "[cyan]サーバーポート番号を入力してください[/cyan]",
+        default=5000,
+        show_default=True
+    )
+    
+    # 自動ポート検索の選択
+    auto_port = Confirm.ask(
+        "[cyan]ポートが使用中の場合、自動で別のポートを探しますか？[/cyan]",
+        default=True
+    )
+    
+    # ブラウザ自動起動の選択
+    auto_open = Confirm.ask(
+        "[cyan]ブラウザを自動で開きますか？[/cyan]",
+        default=True
+    )
+    
     try:
-        # PelicanServerManager を使ってローカルサーバーを起動
-        manager = PelicanServerManager(title)
-        manager.start()
+        base_dir = Path.cwd()
         
-        console.print(f"[bold green]✓ 小説を生成しました。Webブラウザで表示中...[/bold green]")
-        console.print(f"[dim]URL: http://localhost:8000[/dim]")
+        # FlaskServerManager を使用
+        from .flask_manager import FlaskServerManager
+        manager = FlaskServerManager(base_dir, default_port=port)
         
-        # ユーザーが終了するまで待機
-        console.print("\n[yellow]サーバーを停止するには Ctrl+C を押してください[/yellow]")
-        while True:
-            time.sleep(1)
+        # 自動ポート検索が有効な場合
+        if auto_port:
+            available_port = manager.find_available_port(start_port=port)
+            if available_port and available_port != port:
+                port = available_port
+                console.print(f"[cyan]💡 利用可能なポートを見つけました: {port}[/cyan]")
+        
+        # コンテンツを準備
+        if not manager.prepare_content(title):
+            console.print("[red]✗ コンテンツの準備に失敗しました[/red]")
+            return
+        
+        # サーバーを起動
+        if not manager.start_server(port=port, auto_open=auto_open):
+            console.print("[red]✗ サーバーの起動に失敗しました[/red]")
+            return
+        
+        console.print(f"[bold green]✓ 小説をFlaskで表示中...[/bold green]")
+        console.print(f"[dim]URL: http://localhost:{port}[/dim]")
+        
+        # サーバーの終了を待機
+        manager.wait_for_server()
+        
+    except KeyboardInterrupt:
+        console.print("\n[yellow]サーバーを停止中...[/yellow]")
     except Exception as e:
         console.print(f"[red]✗ エラー: {str(e)}[/red]")
+    finally:
+        if 'manager' in locals():
+            manager.cleanup()
 
 @click.group(invoke_without_command=True)
 @click.pass_context
@@ -620,23 +663,53 @@ def generate_episode(title: str, arc: str, episodes: str):
 
 @cli.command()
 @click.option('--title', required=True, help='小説のタイトル（ディレクトリ名）')
-def read(title: str):
+@click.option('--port', default=5000, type=int, help='サーバーポート（デフォルト: 5000）')
+@click.option('--auto-port', is_flag=True, help='利用可能なポートを自動で検索')
+@click.option('--no-browser', is_flag=True, help='ブラウザの自動起動を無効化')
+def read(title: str, port: int, auto_port: bool, no_browser: bool):
     """小説をWebブラウザで読みます"""
     console = Console()
+    
     try:
-        # PelicanServerManager を使ってローカルサーバーを起動
-        manager = PelicanServerManager(title)
-        manager.start()
+        base_dir = Path.cwd()
         
-        console.print(f"[bold green]✓ 小説を生成しました。Webブラウザで表示中...[/bold green]")
-        console.print(f"[dim]URL: http://localhost:8000[/dim]")
+        # FlaskServerManager を使用
+        from .flask_manager import FlaskServerManager
+        manager = FlaskServerManager(base_dir, default_port=port)
         
-        # ユーザーが終了するまで待機
-        console.print("\n[yellow]サーバーを停止するには Ctrl+C を押してください[/yellow]")
-        while True:
-            time.sleep(1)
+        # 自動ポート検索が有効な場合
+        if auto_port:
+            available_port = manager.find_available_port(start_port=port)
+            if available_port:
+                port = available_port
+                console.print(f"[cyan]💡 利用可能なポートを見つけました: {port}[/cyan]")
+            else:
+                console.print(f"[yellow]警告: ポート {port} 以降で利用可能なポートが見つかりませんでした[/yellow]")
+                console.print(f"[yellow]デフォルトポート {port} で試行します[/yellow]")
+        
+        # コンテンツを準備
+        if not manager.prepare_content(title):
+            console.print("[red]✗ コンテンツの準備に失敗しました[/red]")
+            return
+        
+        # サーバーを起動
+        if not manager.start_server(port=port, auto_open=not no_browser):
+            console.print("[red]✗ サーバーの起動に失敗しました[/red]")
+            return
+        
+        console.print(f"[bold green]✓ 小説をFlaskで表示中...[/bold green]")
+        console.print(f"[dim]URL: http://localhost:{port}[/dim]")
+        
+        # サーバーの終了を待機
+        manager.wait_for_server()
+        
+    except KeyboardInterrupt:
+        console.print("\n[yellow]サーバーを停止中...[/yellow]")
     except Exception as e:
         console.print(f"[red]✗ エラー: {str(e)}[/red]")
+    finally:
+        if 'manager' in locals():
+            manager.cleanup()
 
 def main():
     """メイン関数"""

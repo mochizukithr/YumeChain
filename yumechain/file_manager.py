@@ -33,7 +33,7 @@ class FileManager:
         # setting.md のテンプレートを作成（存在しない場合のみ）
         setting_file = novel_dir / "setting.md"
         if not setting_file.exists():
-            from prompt_templates import SETTING_TEMPLATE
+            from .prompt_templates import SETTING_TEMPLATE
             setting_file.write_text(SETTING_TEMPLATE, encoding='utf-8')
             print(f"Created template setting file: {setting_file}")
     
