@@ -381,7 +381,7 @@ def handle_generate_plot_command():
         setting = fm.read_setting(title)
         
         # LLMを使ってプロットを生成
-        llm = LLMClient()
+        llm = LLMClient.create_for_plot_generation()
         plot = llm.generate_plot(setting)
         
         # プロットをファイルに保存
@@ -416,21 +416,21 @@ def handle_generate_episode_command():
     try:
         fm = FileManager()
         setting = fm.read_setting(title)
+        plot_data = fm.read_plot(title)
         
         # 各エピソードを生成
-        llm = LLMClient()
+        llm = LLMClient.create_for_episode_generation()
         for episode_number in episode_list:
             console.print(f"\n[bold]エピソード {episode_number} を生成中...[/bold]")
             
-            # エピソードの設定を取得
-            episode_setting = {
-                "title": title,
-                "arc": selected_arc,
-                "episode": episode_number
-            }
-            
-            # LLMを使ってエピソードを生成
-            episode_content = llm.generate_episode(episode_setting)
+            # LLMを使ってエピソードを生成（新しい方式：コンテキスト付きエピソード生成）
+            episode_content = llm.generate_episode_with_context(
+                book_title=title,
+                setting_content=setting,
+                arc=selected_arc,
+                episode=episode_number,
+                plot_data=plot_data
+            )
             
             # エピソードをファイルに保存
             fm.save_episode(title, selected_arc, episode_number, episode_content)
@@ -594,7 +594,7 @@ def generate_plot(title: str):
         setting = fm.read_setting(title)
         
         # LLMを使ってプロットを生成
-        llm = LLMClient()
+        llm = LLMClient.create_for_plot_generation()
         plot = llm.generate_plot(setting)
         
         # プロットをファイルに保存
@@ -638,21 +638,21 @@ def generate_episode(title: str, arc: str, episodes: str):
     try:
         fm = FileManager()
         setting = fm.read_setting(title)
+        plot_data = fm.read_plot(title)
         
         # 各エピソードを生成
-        llm = LLMClient()
+        llm = LLMClient.create_for_episode_generation()
         for episode_number in episode_numbers:
             console.print(f"\n[bold]エピソード {episode_number} を生成中...[/bold]")
             
-            # エピソードの設定を取得
-            episode_setting = {
-                "title": title,
-                "arc": arc,
-                "episode": episode_number
-            }
-            
-            # LLMを使ってエピソードを生成
-            episode_content = llm.generate_episode(episode_setting)
+            # LLMを使ってエピソードを生成（新しい方式：コンテキスト付きエピソード生成）
+            episode_content = llm.generate_episode_with_context(
+                book_title=title,
+                setting_content=setting,
+                arc=arc,
+                episode=episode_number,
+                plot_data=plot_data
+            )
             
             # エピソードをファイルに保存
             fm.save_episode(title, arc, episode_number, episode_content)

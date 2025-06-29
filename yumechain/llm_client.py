@@ -319,7 +319,7 @@ class LLMClient:
     
     def generate_plot(self, setting_content: str, target_arc: str = None) -> Dict[str, Any]:
         """プロット生成"""
-        from prompt_templates import PLOT_GENERATION_PROMPT, ARC_SPECIFIC_PLOT_GENERATION_PROMPT
+        from .prompt_templates import PLOT_GENERATION_PROMPT, ARC_SPECIFIC_PLOT_GENERATION_PROMPT
         
         self.console.print("[bold blue]📖 プロット生成を開始します[/bold blue]")
         
@@ -426,7 +426,7 @@ class LLMClient:
     
     def generate_episode(self, setting_content: str, plot_content: str) -> str:
         """エピソード生成"""
-        from prompt_templates import EPISODE_GENERATION_PROMPT
+        from .prompt_templates import EPISODE_GENERATION_PROMPT
         
         self.console.print("[bold blue]📝 エピソード生成を開始します[/bold blue]")
         
@@ -493,8 +493,8 @@ class LLMClient:
         Returns:
             生成されたエピソード本文
         """
-        from prompt_templates import EPISODE_GENERATION_WITH_FULL_PLOT_PROMPT, EPISODE_GENERATION_WITH_FULL_PLOT_NO_PREVIOUS_PROMPT
-        from file_manager import FileManager
+        from .prompt_templates import EPISODE_GENERATION_WITH_FULL_PLOT_PROMPT, EPISODE_GENERATION_WITH_FULL_PLOT_NO_PREVIOUS_PROMPT
+        from .file_manager import FileManager
         import json
         
         self.console.print("[bold blue]📝 エピソード生成を開始します（プロット全体使用）[/bold blue]")
