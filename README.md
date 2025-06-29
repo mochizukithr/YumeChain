@@ -11,6 +11,7 @@ LLM（OpenAI、Gemini、Anthropic など）を使って設定から小説を自�
 - Flask による Web 表示機能（ポート指定対応）
 - ドライランモード対応
 - コンテキストキャッシュ機能
+- はてなブログ投稿機能（AtomPub API 経由）
 
 ## インストール
 
@@ -311,6 +312,75 @@ YumeChain では Flask を使用した軽量な Web 表示機能を提供しま�
 - **自動ポート検索**: `--auto-port` オプションで利用可能なポートを自動検索
 - **インタラクティブ設定**: メニューからの起動時も対話的にポート設定可能
 
+## はてなブログ投稿機能
+
+生成した小説エピソードを直接はてなブログに投稿できます。Markdown 形式のコンテンツを自動的に HTML に変換し、段落内の改行も正しく`<br>`タグに変換されるため、読みやすい形で投稿されます。
+
+### 特徴
+
+- **自動 HTML 変換**: Markdown 形式のコンテンツを自動的に HTML に変換
+- **改行の保持**: 段落内の改行を`<br>`タグに変換して、元の改行を保持
+- **プレビュー機能**: 投稿前に Markdown または HTML 形式でプレビュー可能
+- **下書き対応**: 下書きとして保存可能
+- **カテゴリ設定**: 複数カテゴリの設定に対応
+
+### はてなブログの設定
+
+投稿機能を使用するには、以下の環境変数を `.env` ファイルに設定してください：
+
+```bash
+# はてなブログ投稿設定
+HATENA_USERNAME=your_hatena_username
+HATENA_API_KEY=your_hatena_api_key
+HATENA_BLOG_ID=your_blog_id.hatenablog.com
+```
+
+**API キーの取得方法:**
+
+1. はてなブログの管理画面にログイン
+2. 設定 → 詳細設定 → API キー
+3. AtomPub API キーを確認
+
+### 7. はてなブログに投稿
+
+#### 投稿可能なエピソード一覧を表示
+
+```bash
+yumechain publish --title "昭和転生"
+```
+
+#### 特定のエピソードを投稿
+
+```bash
+yumechain publish --title "昭和転生" --episode "中学生編_01"
+```
+
+#### オプション
+
+- `--blog-title`: ブログ記事のタイトル（指定しない場合はエピソード名を使用）
+- `--categories`: カテゴリ（カンマ区切りで複数指定可能）
+- `--draft`: 下書きとして投稿
+- `--preview`: 投稿内容をプレビュー表示のみ（実際には投稿しない）
+- `--preview-html`: 投稿内容を HTML 形式でプレビュー表示（改行変換結果を確認可能）
+
+**使用例:**
+
+```bash
+# Markdownプレビュー表示
+yumechain publish --title "昭和転生" --episode "中学生編_01" --preview
+
+# HTML変換後のプレビュー表示
+yumechain publish --title "昭和転生" --episode "中学生編_01" --preview-html
+
+# カスタムタイトルとカテゴリで投稿
+yumechain publish --title "昭和転生" --episode "中学生編_01" \
+  --blog-title "昭和転生 第1話：タイムスリップ" \
+  --categories "小説,転生,昭和"
+
+# 下書きとして投稿
+yumechain publish --title "昭和転生" --episode "中学生編_01" --draft
+```
+
 ## ディレクトリ構成
 
 ```
@@ -429,6 +499,59 @@ yumechain read --title "昭和転生" --auto-port
 # ブラウザ自動起動無効化
 yumechain read --title "昭和転生" --no-browser
 ```
+
+### publish
+
+生成した小説エピソードをはてなブログに投稿します。
+
+```bash
+# 投稿可能なエピソード一覧を表示
+yumechain publish --title <小説タイトル>
+
+# 特定のエピソードを投稿
+yumechain publish --title <小説タイトル> --episode <エピソード名> [オプション]
+```
+
+**主要オプション:**
+
+- `--episode <エピソード名>`: 投稿するエピソード名を指定
+- `--blog-title <タイトル>`: ブログ記事のタイトル（省略時はエピソード名を使用）
+- `--categories <カテゴリ>`: カテゴリ（カンマ区切りで複数指定可能）
+- `--draft`: 下書きとして投稿
+- `--preview`: 投稿内容をプレビュー表示のみ（実際には投稿しない）
+- `--preview-html`: 投稿内容を HTML 形式でプレビュー表示（改行変換結果を確認可能）
+
+**使用例:**
+
+```bash
+# エピソード一覧表示
+yumechain publish --title "昭和転生"
+
+# 基本的な投稿
+yumechain publish --title "昭和転生" --episode "中学生編_01"
+
+# プレビュー表示
+yumechain publish --title "昭和転生" --episode "中学生編_01" --preview
+
+# HTML変換後のプレビュー表示
+yumechain publish --title "昭和転生" --episode "中学生編_01" --preview-html
+
+# カスタムタイトルとカテゴリ付きで投稿
+yumechain publish --title "昭和転生" --episode "中学生編_01" \
+  --blog-title "昭和転生 第1話：タイムスリップ" \
+  --categories "小説,転生,昭和"
+
+# 下書きとして投稿
+yumechain publish --title "昭和転生" --episode "中学生編_01" --draft
+```
+
+**前提条件:**
+
+はてなブログ投稿機能を使用するには、以下の環境変数が必要です：
+
+- `HATENA_USERNAME`: はてなユーザー名
+- `HATENA_API_KEY`: はてなブログ AtomPub API キー
+- `HATENA_BLOG_ID`: ブログ ID（例: xxxxx.hatenablog.com）
 
 ## オプション
 

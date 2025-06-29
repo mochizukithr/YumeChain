@@ -15,7 +15,9 @@ from rich.prompt import Prompt, Confirm, IntPrompt
 from rich.table import Table
 from .llm_client import LLMClient
 from .file_manager import FileManager
+from .hatena_client import HatenaBlogClient
 import json
+import os
 
 def getch():
     """単一文字を入力待ちして即座に返す（macOS/Linux用）"""
@@ -110,12 +112,13 @@ def show_interactive_menu():
         table.add_row("3", "generate-plot", "設定ファイルからプロットを生成")
         table.add_row("4", "generate-episode", "指定した話の本文を生成")
         table.add_row("5", "read", "小説をWebブラウザで読む")
+        table.add_row("6", "publish", "小説をはてなブログに投稿")
         table.add_row("0", "exit", "終了")
         
         console.print(table)
         console.print()
         
-        choice = get_single_char_input("[cyan]選択してください[/cyan]", ["0", "1", "2", "3", "4", "5"], "0")
+        choice = get_single_char_input("[cyan]選択してください[/cyan]", ["0", "1", "2", "3", "4", "5", "6"], "0")
         
         if choice == "0":
             console.print("[yellow]アプリを終了します。[/yellow]")
@@ -130,6 +133,8 @@ def show_interactive_menu():
             handle_generate_episode_command()
         elif choice == "5":
             handle_read_command()
+        elif choice == "6":
+            handle_publish_command()
         
         console.print("\n[dim]Press any key to continue...[/dim]")
         getch()
@@ -504,6 +509,133 @@ def handle_read_command():
         if 'manager' in locals():
             manager.cleanup()
 
+def handle_publish_command():
+    """'publish' コマンドの処理"""
+    title = select_novel_title()
+    if not title:
+        return
+    
+    console = Console()
+    
+    # はてなブログの認証情報を環境変数から取得
+    hatena_username = os.getenv('HATENA_USERNAME')
+    hatena_api_key = os.getenv('HATENA_API_KEY')
+    hatena_blog_id = os.getenv('HATENA_BLOG_ID')
+    
+    if not all([hatena_username, hatena_api_key, hatena_blog_id]):
+        console.print("[red]✗ はてなブログの認証情報が設定されていません[/red]")
+        console.print("[yellow]以下の環境変数を .env ファイルに設定してください:[/yellow]")
+        console.print("- HATENA_USERNAME (はてなユーザー名)")
+        console.print("- HATENA_API_KEY (はてなブログAPI キー)")
+        console.print("- HATENA_BLOG_ID (ブログID、例: xxxxx.hatenablog.com)")
+        return
+    
+    # エピソード一覧を表示
+    fm = FileManager()
+    novel_dir = fm.get_novel_dir(title)
+    stories_dir = novel_dir / "stories"
+    
+    if not stories_dir.exists():
+        console.print(f"[red]✗ stories ディレクトリが見つかりません: {stories_dir}[/red]")
+        return
+    
+    story_files = list(stories_dir.glob("*.md"))
+    if not story_files:
+        console.print("[yellow]投稿可能なエピソードが見つかりません[/yellow]")
+        return
+    
+    console.print(f"\n[bold cyan]📚 投稿可能なエピソード ({title})[/bold cyan]")
+    table = Table()
+    table.add_column("No.", style="cyan", no_wrap=True)
+    table.add_column("エピソード名", style="white")
+    
+    episodes = []
+    for i, story_file in enumerate(sorted(story_files), 1):
+        episode_name = story_file.stem
+        episodes.append(episode_name)
+        table.add_row(str(i), episode_name)
+    
+    console.print(table)
+    
+    # エピソードの選択
+    choice = IntPrompt.ask("\n[cyan]投稿するエピソード番号を入力[/cyan]", 
+                         default=1, 
+                         choices=[str(i) for i in range(1, len(episodes) + 1)])
+    
+    selected_episode = episodes[choice - 1]
+    
+    # 追加オプションの選択
+    blog_title = Prompt.ask("[cyan]ブログ記事のタイトル[/cyan] (Enterでデフォルト)", default="")
+    categories = Prompt.ask("[cyan]カテゴリ (カンマ区切り)[/cyan]", default="")
+    draft = Confirm.ask("[cyan]下書きとして投稿しますか？[/cyan]", default=False)
+    
+    # 投稿処理を実行
+    try:
+        # エピソード内容を読み込み
+        episode_file = stories_dir / f"{selected_episode}.md"
+        with open(episode_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # ブログタイトルを決定
+        final_blog_title = blog_title if blog_title else f"{title} - {selected_episode}"
+        
+        # カテゴリを処理
+        category_list = []
+        if categories:
+            category_list = [cat.strip() for cat in categories.split(',')]
+        
+        # はてなブログクライアントを初期化
+        hatena_client = HatenaBlogClient(hatena_username, hatena_api_key, hatena_blog_id)
+        
+        # 投稿確認
+        console.print(f"\n[bold cyan]📤 はてなブログに投稿します[/bold cyan]")
+        console.print(f"[dim]ブログ: {hatena_blog_id}[/dim]")
+        console.print(f"[dim]タイトル: {final_blog_title}[/dim]")
+        console.print(f"[dim]下書き: {'はい' if draft else 'いいえ'}[/dim]")
+        
+        if not get_yes_no_input("投稿を実行しますか？", 'n'):
+            console.print("[yellow]投稿がキャンセルされました[/yellow]")
+            return
+        
+        # 投稿を実行
+        console.print("[cyan]投稿中...[/cyan]")
+        result = hatena_client.create_entry(
+            title=final_blog_title,
+            content=content,
+            categories=category_list,
+            draft=draft
+        )
+        
+        # 結果を表示
+        entry_data = result.get('entry', {})
+        entry_link = None
+        
+        # リンクを取得
+        if 'link' in entry_data:
+            links = entry_data['link']
+            if isinstance(links, list):
+                for link in links:
+                    if isinstance(link, dict) and link.get('@rel') == 'alternate':
+                        entry_link = link.get('@href')
+                        break
+            elif isinstance(links, dict) and links.get('@rel') == 'alternate':
+                entry_link = links.get('@href')
+        
+        console.print(f"[bold green]✓ はてなブログに投稿が完了しました！[/bold green]")
+        console.print(f"[dim]タイトル: {final_blog_title}[/dim]")
+        if entry_link:
+            console.print(f"[dim]URL: {entry_link}[/dim]")
+        
+        if draft:
+            console.print("[yellow]💡 下書きとして保存されました。公開するにはブログ管理画面から設定してください。[/yellow]")
+    
+    except Exception as e:
+        console.print(f"[red]✗ エラー: {str(e)}[/red]")
+        if "401" in str(e):
+            console.print("[yellow]認証エラーです。はてなブログの認証情報を確認してください。[/yellow]")
+        elif "403" in str(e):
+            console.print("[yellow]アクセス権限がありません。ブログIDとAPI設定を確認してください。[/yellow]")
+
 @click.group(invoke_without_command=True)
 @click.pass_context
 def cli(ctx):
@@ -582,47 +714,78 @@ def status(title: str):
     except Exception as e:
         console.print(f"[red]✗ エラー: {str(e)}[/red]")
 
-@cli.command()
+@cli.command("generate-plot")
 @click.option('--title', required=True, help='小説のタイトル（ディレクトリ名）')
-def generate_plot(title: str):
-    """プロットを生成します"""
+@click.option('--arc', help='特定の編のプロットのみ生成')
+@click.option('--dry-run', is_flag=True, help='ドライラン（API呼び出しなし）')
+def generate_plot(title: str, arc: Optional[str], dry_run: bool):
+    """設定ファイルからプロットを生成します"""
     console = Console()
+    
+    if dry_run:
+        console.print("[yellow]🏃‍♂️ ドライランモードで実行中...[/yellow]")
+    
     console.print(f"[bold cyan]🛠️ プロット生成中...[/bold cyan]")
     
     try:
         fm = FileManager()
         setting = fm.read_setting(title)
         
+        if dry_run:
+            console.print("[yellow]💡 ドライランモード: LLM API呼び出しをスキップします[/yellow]")
+            console.print(f"[dim]設定内容: {setting[:100]}...[/dim]")
+            return
+        
         # LLMを使ってプロットを生成
         llm = LLMClient.create_for_plot_generation()
-        plot = llm.generate_plot(setting)
         
-        # プロットをファイルに保存
-        fm.save_plot(title, plot)
+        if arc:
+            # 特定の編のプロット生成
+            console.print(f"[cyan]編 '{arc}' のプロットを生成中...[/cyan]")
+            plot = llm.generate_arc_plot(setting, arc)
+            
+            # 既存のプロットがある場合は読み込み、なければ新規作成
+            try:
+                existing_plot = fm.read_plot(title)
+            except:
+                existing_plot = {}
+            
+            # 新しい編のプロットを追加
+            existing_plot[arc] = plot
+            fm.save_plot(title, existing_plot)
+        else:
+            # 全編のプロット生成
+            plot = llm.generate_plot(setting)
+            fm.save_plot(title, plot)
         
         console.print(f"[green]✓ プロットが生成されました: {title}/plot.json[/green]")
     except Exception as e:
         console.print(f"[red]✗ エラー: {str(e)}[/red]")
 
-@cli.command()
+@cli.command("generate-episode")
 @click.option('--title', required=True, help='小説のタイトル（ディレクトリ名）')
-@click.option('--arc', required=True, help='編の名前')
-@click.option('--episodes', required=True, help='生成する話数（カンマ区切りまたは範囲指定）')
-def generate_episode(title: str, arc: str, episodes: str):
-    """エピソードを生成します"""
+@click.option('--arc', required=True, help='編名')
+@click.option('--episodes', required=True, help='話番号（例: 1, 1-3, 1,3,5）')
+@click.option('--dry-run', is_flag=True, help='ドライラン（API呼び出しなし）')
+@click.option('--force', is_flag=True, help='既存ファイルを上書き')
+def generate_episode(title: str, arc: str, episodes: str, dry_run: bool, force: bool):
+    """指定した話の本文を生成します"""
     console = Console()
     
-    # エピソード番号を解析
-    max_episode = 0
+    if dry_run:
+        console.print("[yellow]🏃‍♂️ ドライランモードで実行中...[/yellow]")
+    
+    # プロットから最大エピソード数を取得
     try:
         fm = FileManager()
         plot_data = fm.read_plot(title)
-        if arc in plot_data:
-            episodes_list = plot_data[arc]
-            max_episode = len(episodes_list)
-        else:
-            console.print(f"[red]❌ 指定された編が見つかりません: {arc}[/red]")
+        
+        if arc not in plot_data:
+            console.print(f"[red]エラー: 編 '{arc}' がプロットに見つかりません[/red]")
             return
+        
+        max_episode = len(plot_data[arc])
+        
     except Exception as e:
         console.print(f"[red]✗ エラー: {str(e)}[/red]")
         return
@@ -645,6 +808,11 @@ def generate_episode(title: str, arc: str, episodes: str):
         for episode_number in episode_numbers:
             console.print(f"\n[bold]エピソード {episode_number} を生成中...[/bold]")
             
+            # ドライランの場合
+            if dry_run:
+                console.print(f"[yellow]💡 ドライランモード: エピソード {episode_number} の生成をスキップします[/yellow]")
+                continue
+            
             # LLMを使ってエピソードを生成（新しい方式：コンテキスト付きエピソード生成）
             episode_content = llm.generate_episode_with_context(
                 book_title=title,
@@ -660,6 +828,171 @@ def generate_episode(title: str, arc: str, episodes: str):
         console.print(f"[green]✓ エピソードが生成されました: {title}/stories/[/green]")
     except Exception as e:
         console.print(f"[red]✗ エラー: {str(e)}[/red]")
+
+@cli.command()
+@click.option('--title', required=True, help='小説のタイトル（ディレクトリ名）')
+@click.option('--episode', help='投稿するエピソード名（指定しない場合は全エピソードのリストを表示）')
+@click.option('--blog-title', help='ブログ記事のタイトル（指定しない場合はエピソード名を使用）')
+@click.option('--categories', help='カテゴリ（カンマ区切りで複数指定可能）')
+@click.option('--draft', is_flag=True, help='下書きとして投稿')
+@click.option('--preview', is_flag=True, help='投稿内容をプレビュー表示のみ（実際には投稿しない）')
+@click.option('--preview-html', is_flag=True, help='投稿内容をHTML形式でプレビュー表示')
+def publish(title: str, episode: Optional[str], blog_title: Optional[str], 
+           categories: Optional[str], draft: bool, preview: bool, preview_html: bool):
+    """小説エピソードをはてなブログに投稿します"""
+    console = Console()
+    
+    try:
+        fm = FileManager()
+        novel_dir = fm.get_novel_dir(title)
+        
+        if not novel_dir.exists():
+            console.print(f"[red]✗ 小説プロジェクト '{title}' が見つかりません[/red]")
+            return
+        
+        stories_dir = novel_dir / "stories"
+        if not stories_dir.exists():
+            console.print(f"[red]✗ stories ディレクトリが見つかりません: {stories_dir}[/red]")
+            return
+        
+        # エピソードが指定されていない場合、利用可能なエピソードを表示
+        if not episode:
+            story_files = list(stories_dir.glob("*.md"))
+            if not story_files:
+                console.print("[yellow]投稿可能なエピソードが見つかりません[/yellow]")
+                return
+            
+            console.print(f"[bold cyan]📚 利用可能なエピソード ({title})[/bold cyan]")
+            table = Table()
+            table.add_column("No.", style="cyan", no_wrap=True)
+            table.add_column("エピソード名", style="white")
+            table.add_column("ファイル名", style="dim")
+            
+            for i, story_file in enumerate(sorted(story_files), 1):
+                episode_name = story_file.stem
+                table.add_row(str(i), episode_name, story_file.name)
+            
+            console.print(table)
+            console.print("\n[dim]投稿するには --episode オプションでエピソード名を指定してください[/dim]")
+            console.print("[dim]例: yumechain publish --title 小説名 --episode エピソード名[/dim]")
+            return
+        
+        # 指定されたエピソードファイルを確認
+        episode_file = stories_dir / f"{episode}.md"
+        if not episode_file.exists():
+            console.print(f"[red]✗ エピソードファイルが見つかりません: {episode_file}[/red]")
+            return
+        
+        # エピソード内容を読み込み
+        with open(episode_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # ブログタイトルを決定
+        if not blog_title:
+            blog_title = f"{title} - {episode}"
+        
+        # カテゴリを処理
+        category_list = []
+        if categories:
+            category_list = [cat.strip() for cat in categories.split(',')]
+        
+        # プレビューモードの場合
+        if preview or preview_html:
+            console.print(f"[bold cyan]📝 投稿プレビュー[/bold cyan]")
+            console.print(f"[bold]タイトル:[/bold] {blog_title}")
+            console.print(f"[bold]カテゴリ:[/bold] {', '.join(category_list) if category_list else 'なし'}")
+            console.print(f"[bold]下書き:[/bold] {'はい' if draft else 'いいえ'}")
+            
+            if preview_html:
+                # HTMLプレビュー
+                console.print(f"[bold]HTML変換後の内容:[/bold]")
+                console.print(f"[dim]{'-' * 50}[/dim]")
+                
+                # はてなブログクライアントを作成してHTML変換を実行
+                hatena_client = HatenaBlogClient("dummy", "dummy", "dummy.hatenablog.com")
+                html_content = hatena_client._markdown_to_html(content)
+                
+                # HTMLの最初の500文字を表示
+                preview_content = html_content[:500] + "..." if len(html_content) > 500 else html_content
+                console.print(preview_content)
+                console.print(f"[dim]{'-' * 50}[/dim]")
+                console.print(f"[bold]元の文字数:[/bold] {len(content)} 文字")
+                console.print(f"[bold]HTML文字数:[/bold] {len(html_content)} 文字")
+            else:
+                # 通常のMarkdownプレビュー
+                console.print(f"[bold]内容:[/bold]")
+                console.print(f"[dim]{'-' * 50}[/dim]")
+                # 内容の最初の200文字を表示
+                preview_content = content[:200] + "..." if len(content) > 200 else content
+                console.print(preview_content)
+                console.print(f"[dim]{'-' * 50}[/dim]")
+                console.print(f"[bold]文字数:[/bold] {len(content)} 文字")
+            return
+        
+        # はてなブログの認証情報を環境変数から取得
+        hatena_username = os.getenv('HATENA_USERNAME')
+        hatena_api_key = os.getenv('HATENA_API_KEY')
+        hatena_blog_id = os.getenv('HATENA_BLOG_ID')
+        
+        if not all([hatena_username, hatena_api_key, hatena_blog_id]):
+            console.print("[red]✗ はてなブログの認証情報が設定されていません[/red]")
+            console.print("[yellow]以下の環境変数を .env ファイルに設定してください:[/yellow]")
+            console.print("- HATENA_USERNAME (はてなユーザー名)")
+            console.print("- HATENA_API_KEY (はてなブログAPI キー)")
+            console.print("- HATENA_BLOG_ID (ブログID、例: xxxxx.hatenablog.com)")
+            return
+        
+        # はてなブログクライアントを初期化
+        hatena_client = HatenaBlogClient(hatena_username, hatena_api_key, hatena_blog_id)
+        
+        # 投稿確認
+        console.print(f"[bold cyan]📤 はてなブログに投稿します[/bold cyan]")
+        console.print(f"[dim]ブログ: {hatena_blog_id}[/dim]")
+        console.print(f"[dim]タイトル: {blog_title}[/dim]")
+        console.print(f"[dim]下書き: {'はい' if draft else 'いいえ'}[/dim]")
+        
+        if not get_yes_no_input("投稿を実行しますか？", 'n'):
+            console.print("[yellow]投稿がキャンセルされました[/yellow]")
+            return
+        
+        # 投稿を実行
+        console.print("[cyan]投稿中...[/cyan]")
+        result = hatena_client.create_entry(
+            title=blog_title,
+            content=content,
+            categories=category_list,
+            draft=draft
+        )
+        
+        # 結果を表示
+        entry_data = result.get('entry', {})
+        entry_link = None
+        
+        # リンクを取得
+        if 'link' in entry_data:
+            links = entry_data['link']
+            if isinstance(links, list):
+                for link in links:
+                    if isinstance(link, dict) and link.get('@rel') == 'alternate':
+                        entry_link = link.get('@href')
+                        break
+            elif isinstance(links, dict) and links.get('@rel') == 'alternate':
+                entry_link = links.get('@href')
+        
+        console.print(f"[bold green]✓ はてなブログに投稿が完了しました！[/bold green]")
+        console.print(f"[dim]タイトル: {blog_title}[/dim]")
+        if entry_link:
+            console.print(f"[dim]URL: {entry_link}[/dim]")
+        
+        if draft:
+            console.print("[yellow]💡 下書きとして保存されました。公開するにはブログ管理画面から設定してください。[/yellow]")
+    
+    except Exception as e:
+        console.print(f"[red]✗ エラー: {str(e)}[/red]")
+        if "401" in str(e):
+            console.print("[yellow]認証エラーです。はてなブログの認証情報を確認してください。[/yellow]")
+        elif "403" in str(e):
+            console.print("[yellow]アクセス権限がありません。ブログIDとAPI設定を確認してください。[/yellow]")
 
 @cli.command()
 @click.option('--title', required=True, help='小説のタイトル（ディレクトリ名）')

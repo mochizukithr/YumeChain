@@ -12,6 +12,8 @@ dependencies = [
     "flask>=2.3.0",
     "markdown>=3.4.0",
     "litellm>=1.0.0",
+    "requests>=2.31.0",
+    "xmltodict>=0.13.0",
 ]
 
 [project.scripts]
