@@ -1,0 +1,225 @@
+{% if novel_found %}
+<div class="novel-detail" style="padding: 2rem">
+  <!-- loading indicator を追加 -->
+  <div
+    id="loading-indicator"
+    class="htmx-indicator loading loading-hidden"
+    style="
+      height: 0;
+      overflow: hidden;
+      transition: height 0.3s ease-out, opacity 0.3s ease-out,
+        margin-bottom 0.3s ease-out;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 8px;
+      margin-bottom: 0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      opacity: 0;
+    "
+  >
+    <div
+      class="spinner"
+      style="
+        width: 20px;
+        height: 20px;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid var(--primary-color);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      "
+    ></div>
+    <div style="font-size: 0.9rem; color: var(--text-secondary)">
+      読み込み中...
+    </div>
+  </div>
+
+  <style>
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    .loading-hidden {
+      height: 0 !important;
+      margin-bottom: 0 !important;
+      opacity: 0 !important;
+    }
+
+    .loading-visible {
+      height: 60px !important;
+      margin-bottom: 1rem !important;
+      opacity: 1 !important;
+    }
+
+    .htmx-indicator {
+      opacity: 0;
+    }
+
+    .htmx-indicator.htmx-request {
+      opacity: 1;
+    }
+  </style>
+
+  <script>
+    document.addEventListener("htmx:beforeRequest", function (event) {
+      const indicator = document.getElementById("loading-indicator");
+      if (indicator) {
+        // スピナーとテキストを動的に追加
+        indicator.innerHTML = `
+          <div class="spinner" style="
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+          "></div>
+          <div style="font-size: 0.9rem; color: var(--text-secondary)">
+            読み込み中...
+          </div>
+        `;
+        indicator.classList.remove("loading-hidden");
+        indicator.classList.add("loading-visible");
+      }
+    });
+
+    document.addEventListener("htmx:afterRequest", function (event) {
+      const indicator = document.getElementById("loading-indicator");
+      if (indicator) {
+        indicator.classList.remove("loading-visible");
+        indicator.classList.add("loading-hidden");
+        // 少し遅延してからコンテンツをクリア
+        setTimeout(() => {
+          indicator.innerHTML = "";
+        }, 300);
+      }
+    });
+  </script>
+
+  <div
+    class="novel-header"
+    style="
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 2px solid var(--primary-color);
+    "
+  >
+    <button
+      class="btn btn-outline"
+      onclick="location.reload()"
+      style="margin-bottom: 1rem"
+    >
+      ← ホームに戻る
+    </button>
+    <h2 style="font-size: 2rem; color: var(--secondary-color); margin: 1rem 0">
+      {{ novel_title }}
+    </h2>
+    <div
+      class="novel-info"
+      style="
+        display: flex;
+        gap: 2rem;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+      "
+    >
+      <span class="story-count">📖 {{ story_count }}話収録</span>
+      <span class="last-updated">📅 最終更新: {{ last_updated }}</span>
+    </div>
+  </div>
+
+  <div class="episodes-grid" style="display: grid; gap: 1rem">
+    {% for story in stories %}
+    <div
+      class="episode-card"
+      style="
+        background: var(--card-bg);
+        border-radius: var(--border-radius);
+        padding: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        cursor: pointer;
+        transition: var(--transition);
+        border-left: 4px solid var(--primary-color);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+      "
+      hx-get="/novel/{{ novel_title }}/episode/{{ story.slug }}"
+      hx-target="#main-content"
+      hx-indicator="#loading-indicator"
+      onmouseover="this.style.transform='translateX(4px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'"
+      onmouseout="this.style.transform=''; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)'"
+    >
+      <div
+        class="episode-number"
+        style="
+          background: var(--primary-color);
+          color: white;
+          padding: 0.5rem;
+          border-radius: 50%;
+          font-weight: bold;
+          min-width: 40px;
+          text-align: center;
+          font-size: 0.9rem;
+        "
+      >
+        {{ story.episode }}
+      </div>
+      <div class="episode-info" style="flex: 1">
+        <div
+          class="episode-title"
+          style="
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--secondary-color);
+            margin-bottom: 0.25rem;
+          "
+        >
+          {{ story.title }}
+        </div>
+        <div
+          class="episode-arc"
+          style="
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+          "
+        >
+          {{ story.arc }}
+        </div>
+        <div
+          class="episode-date"
+          style="color: var(--text-secondary); font-size: 0.8rem"
+        >
+          {{ story.date }}
+        </div>
+      </div>
+      <div
+        class="episode-action"
+        style="color: var(--primary-color); font-weight: 500"
+      >
+        読む →
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div
+  class="error-message"
+  style="text-align: center; padding: 3rem; color: #e74c3c"
+>
+  <h2>エラー</h2>
+  <p>小説「{{ novel_title }}」が見つかりません。</p>
+  <button class="btn btn-primary" onclick="location.reload()">
+    ホームに戻る
+  </button>
+</div>
+{% endif %}

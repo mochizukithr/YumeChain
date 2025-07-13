@@ -1,0 +1,34 @@
+{% if novels %}
+<div class="novels-grid">
+  {% for novel in novels %}
+  <div
+    class="novel-card"
+    hx-get="/novel/{{ novel }}"
+    hx-target="#main-content"
+    hx-indicator="#loading-indicator"
+  >
+    <div class="novel-title">{{ novel }}</div>
+    <div class="novel-meta">
+      <span>📖</span>
+      <span>{{ novel_data[novel].story_count }}話収録</span>
+    </div>
+    <div class="novel-actions">
+      <button class="btn btn-primary">読む</button>
+      <button
+        class="btn btn-outline"
+        hx-get="/api/novels/{{ novel }}"
+        hx-target="#main-content"
+      >
+        詳細
+      </button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="empty-state-icon">🔍</div>
+  <h3>検索結果が見つかりませんでした</h3>
+  <p>別のキーワードで検索してみてください。</p>
+</div>
+{% endif %}

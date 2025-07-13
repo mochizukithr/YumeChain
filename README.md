@@ -400,14 +400,11 @@ yumechain/               # YumeChainパッケージ
 ├─ file_manager.py      # ファイル管理
 ├─ flask_manager.py     # Flask Webサーバー管理
 ├─ prompt_templates.py  # プロンプトテンプレート
-├─ static/              # 静的ファイル
-│  └─ css/
-│     └─ novel.css      # 小説表示用CSS
-└─ theme/               # 表示テーマ
-   └─ templates/
-      ├─ base.html
-      ├─ index.html
-      └─ article.html
+└─ static/              # 静的ファイル（CSS、JavaScript等）
+   ├─ css/
+   │  └─ styles.css     # 小説表示用CSS
+   └─ js/
+      └─ app.js         # フロントエンド機能
 ```
 
 **注意**: 生成された小説プロジェクトは`books/`ディレクトリ配下に保存され、`.gitignore`で除外されます。
@@ -569,7 +566,7 @@ YumeChain は以下のコンポーネントで構成されています：
 - **ファイル管理**: `yumechain.file_manager` - プロジェクトファイル操作
 - **Web 表示**: `yumechain.flask_manager` - 小説の Web 表示機能
 - **プロンプトテンプレート**: `yumechain.prompt_templates` - LLM 用プロンプト定義
-- **テーマとスタイル**: `yumechain/theme/`, `yumechain/static/` - Web 表示用カスタマイズ
+- **テーマとスタイル**: `yumechain/static/` - Web 表示用カスタマイズ
 
 ### スクリプト
 

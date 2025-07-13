@@ -446,16 +446,12 @@ def handle_generate_episode_command():
 
 def handle_read_command():
     """'read' コマンドの処理"""
-    title = select_novel_title()
-    if not title:
-        return
-
     console = Console()
     
     # ポート番号を入力
     port = IntPrompt.ask(
         "[cyan]サーバーポート番号を入力してください[/cyan]",
-        default=5000,
+        default=8000,
         show_default=True
     )
     
@@ -474,9 +470,9 @@ def handle_read_command():
     try:
         base_dir = Path.cwd()
         
-        # FlaskServerManager を使用
-        from .flask_manager import FlaskServerManager
-        manager = FlaskServerManager(base_dir, default_port=port)
+        # FastAPIServerManager を使用
+        from .fastapi_manager import FastAPIServerManager
+        manager = FastAPIServerManager(base_dir, default_port=port)
         
         # 自動ポート検索が有効な場合
         if auto_port:
@@ -485,8 +481,8 @@ def handle_read_command():
                 port = available_port
                 console.print(f"[cyan]💡 利用可能なポートを見つけました: {port}[/cyan]")
         
-        # コンテンツを準備
-        if not manager.prepare_content(title):
+        # 全ての小説のコンテンツを準備
+        if not manager.prepare_all_content():
             console.print("[red]✗ コンテンツの準備に失敗しました[/red]")
             return
         
@@ -495,7 +491,7 @@ def handle_read_command():
             console.print("[red]✗ サーバーの起動に失敗しました[/red]")
             return
         
-        console.print(f"[bold green]✓ 小説をFlaskで表示中...[/bold green]")
+        console.print(f"[bold green]✓ 小説をFastAPIで表示中...[/bold green]")
         console.print(f"[dim]URL: http://localhost:{port}[/dim]")
         
         # サーバーの終了を待機
@@ -995,20 +991,19 @@ def publish(title: str, episode: Optional[str], blog_title: Optional[str],
             console.print("[yellow]アクセス権限がありません。ブログIDとAPI設定を確認してください。[/yellow]")
 
 @cli.command()
-@click.option('--title', required=True, help='小説のタイトル（ディレクトリ名）')
-@click.option('--port', default=5000, type=int, help='サーバーポート（デフォルト: 5000）')
+@click.option('--port', default=8000, type=int, help='サーバーポート（デフォルト: 8000）')
 @click.option('--auto-port', is_flag=True, help='利用可能なポートを自動で検索')
 @click.option('--no-browser', is_flag=True, help='ブラウザの自動起動を無効化')
-def read(title: str, port: int, auto_port: bool, no_browser: bool):
+def read(port: int, auto_port: bool, no_browser: bool):
     """小説をWebブラウザで読みます"""
     console = Console()
     
     try:
         base_dir = Path.cwd()
         
-        # FlaskServerManager を使用
-        from .flask_manager import FlaskServerManager
-        manager = FlaskServerManager(base_dir, default_port=port)
+        # FastAPIServerManager を使用
+        from .fastapi_manager import FastAPIServerManager
+        manager = FastAPIServerManager(base_dir, default_port=port)
         
         # 自動ポート検索が有効な場合
         if auto_port:
@@ -1020,8 +1015,8 @@ def read(title: str, port: int, auto_port: bool, no_browser: bool):
                 console.print(f"[yellow]警告: ポート {port} 以降で利用可能なポートが見つかりませんでした[/yellow]")
                 console.print(f"[yellow]デフォルトポート {port} で試行します[/yellow]")
         
-        # コンテンツを準備
-        if not manager.prepare_content(title):
+        # 全ての小説のコンテンツを準備
+        if not manager.prepare_all_content():
             console.print("[red]✗ コンテンツの準備に失敗しました[/red]")
             return
         
@@ -1030,8 +1025,9 @@ def read(title: str, port: int, auto_port: bool, no_browser: bool):
             console.print("[red]✗ サーバーの起動に失敗しました[/red]")
             return
         
-        console.print(f"[bold green]✓ 小説をFlaskで表示中...[/bold green]")
+        console.print(f"[bold green]✓ 小説をFastAPIで表示中...[/bold green]")
         console.print(f"[dim]URL: http://localhost:{port}[/dim]")
+        console.print(f"[dim]API仕様: http://localhost:{port}/docs[/dim]")
         
         # サーバーの終了を待機
         manager.wait_for_server()

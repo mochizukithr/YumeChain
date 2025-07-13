@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>小説リーダー</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <link rel="stylesheet" href="/static/css/styles.css" />
+  </head>
+  <body>
+    <div class="header">
+      <h1>📚 小説リーダー</h1>
+      <p>AIが生成した物語の世界へようこそ</p>
+      <!-- <div class="search-container">
+        <input
+          type="text"
+          class="search-input"
+          placeholder="小説を検索..."
+          hx-get="/search"
+          hx-target="#novels-content"
+          hx-trigger="keyup changed delay:500ms"
+          hx-include="this"
+          name="q"
+          hx-indicator="#search-loading"
+        />
+        <div id="search-loading" class="htmx-indicator loading">
+          <div class="spinner"></div>
+          検索中...
+        </div>
+      </div> -->
+    </div>
+
+    <div class="container">
+      <h2 class="section-title scroll-margin" id="novels-section">
+        利用可能な小説
+      </h2>
+
+      <div id="novels-content" class="scroll-margin">
+        {% if novels %}
+        <div class="novels-grid">
+          {% for novel in novels %}
+          <div
+            class="novel-card"
+            hx-get="/novel/{{ novel }}"
+            hx-target="#main-content"
+            hx-indicator="#loading-indicator"
+          >
+            <div class="novel-title">{{ novel }}</div>
+            <div class="novel-meta">
+              <span>📖</span>
+              <span>{{ novel_data[novel].story_count }}話収録</span>
+            </div>
+            <div class="novel-actions">
+              <button class="btn btn-primary">読む</button>
+              <button
+                class="btn btn-outline"
+                hx-get="/api/novels/{{ novel }}"
+                hx-target="#main-content"
+              >
+                詳細
+              </button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+          <div class="empty-state-icon">📚</div>
+          <h3>小説が見つかりませんでした</h3>
+          <p>まだ小説が登録されていません。</p>
+        </div>
+        {% endif %}
+      </div>
+
+      <div
+        class="main-content scroll-margin"
+        id="main-content"
+        style="display: none"
+      >
+        <div class="loading">
+          <div>小説を選択して読書を開始してください</div>
+        </div>
+        <div id="loading-indicator" class="htmx-indicator loading">
+          <div class="spinner"></div>
+          <div>読み込み中...</div>
+        </div>
+      </div>
+
+      <div class="api-section">
+        <h3>🔗 開発者向けAPI</h3>
+        <div class="api-links">
+          <a href="/api/novels" class="btn btn-outline">小説一覧 API</a>
+          <a href="/docs" class="btn btn-outline">API仕様書 (Swagger UI)</a>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+  </body>
+</html>

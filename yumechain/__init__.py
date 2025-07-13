@@ -15,10 +15,6 @@ def get_package_path():
     """パッケージのパスを取得"""
     return Path(__file__).parent
 
-def get_theme_path():
-    """テーマディレクトリのパスを取得"""
-    return get_package_path() / "theme"
-
 def get_static_path():
     """staticディレクトリのパスを取得"""
     return get_package_path() / "static"
@@ -28,7 +24,7 @@ def get_resource_path(resource_name):
     パッケージ内リソースのパスを取得
     
     Args:
-        resource_name: リソース名（'theme', 'static' など）
+        resource_name: リソース名（'static' など）
     
     Returns:
         Path: リソースのパス

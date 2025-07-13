@@ -9,11 +9,14 @@ dependencies = [
     "google-generativeai>=0.8.5",
     "python-dotenv>=1.1.0",
     "rich>=13.3.0",
-    "flask>=2.3.0",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
     "markdown>=3.4.0",
     "litellm>=1.0.0",
     "requests>=2.31.0",
     "xmltodict>=0.13.0",
+    "pydantic>=2.5.0",
+    "jinja2>=3.1.0",
 ]
 
 [project.scripts]
@@ -24,7 +27,7 @@ packages = ["yumechain"]
 include = [
     "yumechain/**/*.py",
     "yumechain/static/**/*",
-    "yumechain/theme/**/*",
+    "yumechain/templates/**/*",
 ]
 
 [tool.hatch.build.targets.wheel.sources]
